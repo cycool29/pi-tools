@@ -11,6 +11,7 @@ LIGHT_YELLOW="\e[93m"
 LIGHT_BLUE="\e[94m"
 CYAN="\e[36m"
 WHITE="\e[97m"
+DARK_GREY="\e[90m"
 BOLD="\e[1m"
 UNDERLINE="\e[4m"
 INVERTED="\e[7m"
@@ -35,7 +36,7 @@ show_help_message() {
 }
 
 get_device_info() {
-	OS="$((grep PRETTY_NAME  < /etc/os-release | tr -d '"' | awk -F= '{print $2}') || echo "Not available")"
+	OS="$(grep PRETTY_NAME  < /etc/os-release | tr -d '"' | awk -F= '{print $2}')"
 	OS_ARCH="$(dpkg --print-architecture)"
 	KERNEL="$(uname -mrs)"
 	MODEL="$(grep Model  < /proc/cpuinfo | xargs | sed 's/Model : //g' )"
@@ -43,7 +44,7 @@ get_device_info() {
 	IMAGE_VERSION="$(grep 'Raspberry Pi reference'  < /etc/rpi-issue | sed 's/Raspberry Pi reference //g')"
 	INSTALLED_PACKAGES="$(echo " apt ($(apt list --installed 2>/dev/null | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")$([ -a "$HOME/.local/share/applications/pi-apps.desktop" ] && [ "$(echo "$($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed)")" != "" ] && echo " pi-apps ($($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed | wc -l))")"
 	UPTIME="$(uptime -p | sed "s/up //g" | sed s/,//g)"
-	RESOLUTION="$((fbset -i  | grep "mode " | tr -d '"' | tr -d "mode ") || echo "Not available")"
+	RESOLUTION="$(fbset -i  | grep "mode " | tr -d '"' | tr -d "mode ")"
 	DESKTOP_ENVIRONMENT="$(echo "$XDG_CURRENT_DESKTOP")"
 	WINDOW_MANAGER="$(xprop -id "$(xprop -root -notype _NET_SUPPORTING_WM_CHECK | sed 's/.*# //')" -notype -len 100 -f _NET_WM_NAME 8t | grep WM_NAME | sed 's/.*= //g' | xargs)"
 
@@ -58,7 +59,7 @@ get_device_info() {
 		echo -e "${GREEN}Image Version      ${NORMAL} : ${IMAGE_VERSION}"
 		echo -e "${GREEN}Installed Packages ${NORMAL} :${INSTALLED_PACKAGES}"
 		echo -e "${GREEN}Uptime             ${NORMAL} : ${UPTIME}"
-		echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DIM}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
+		echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
 		echo -e "${GREEN}Desktop Environment${NORMAL} : ${DESKTOP_ENVIRONMENT}"
 		echo -e "${GREEN}Window Manager     ${NORMAL} : ${WINDOW_MANAGER}"
 	fi

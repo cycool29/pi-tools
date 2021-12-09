@@ -1,0 +1,94 @@
+#!/bin/bash
+
+#text formatting variables
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+BLUE="\e[34m"
+LIGHT_RED="\e[91m"
+LIGHT_GREEN="\e[92m"
+LIGHT_YELLOW="\e[93m"
+LIGHT_BLUE="\e[94m"
+CYAN="\e[36m"
+WHITE="\e[97m"
+BOLD="\e[1m"
+UNDERLINE="\e[4m"
+INVERTED="\e[7m"
+NORMAL="\e[0m"
+
+
+error() {
+	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}$1${NORMAL}" 1>&2
+	exit 1
+}
+
+
+error() {
+	echo -e "${YELLOW}${BOLD}[!]${NORMAL} ${LIGHT_YELLOW}$1${NORMAL}" 1>&2
+	exit 1
+}
+
+show_help_message() {
+	echo -e "pi-tools (pt) 1.0 in $(dpkg --print-architecture)"
+	echo "pi-tools is a command-line tool to access almost all settings, functions, etc, of your Raspberry Pi."
+   
+}
+
+get_device_info() {
+	OS="$(grep PRETTY_NAME  < /etc/os-release | tr -d '"' | awk -F= '{print $2}')${NORMAL}"
+	OS_ARCH="$(dpkg --print-architecture)"
+	KERNEL="$(uname -mrs) "
+	MODEL="$(grep Model  < /proc/cpuinfo | xargs | sed 's/Model : //g' )"
+	RAM_SIZE="$(echo "scale=2 ; $( awk '/MemTotal/ {print $2}' /proc/meminfo ) / 1024000 " | bc ) GB"
+	IMAGE_VERSION="$(grep 'Raspberry Pi reference'  < /etc/rpi-issue | sed 's/Raspberry Pi reference //g')"
+	INSTALLED_PACKAGES="$(echo " apt ($(apt list --installed 2>/dev/null | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")$([ -a "$HOME/.local/share/applications/pi-apps.desktop" ] && [ "$(echo "$($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed)")" != "" ] && echo " pi-apps ($($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed | wc -l))")"
+	UPTIME="$(uptime -p | sed "s/up //g" | sed s/,//g)"
+	RESOLUTION="$(fbset -i  | grep "mode " | tr -d '"' | tr -d "mode ")"
+	DESKTOP_ENVIRONMENT="$(echo "$XDG_CURRENT_DESKTOP")"
+	WINDOW_MANAGER="$(xprop -id "$(xprop -root -notype _NET_SUPPORTING_WM_CHECK | sed 's/.*# //')" -notype -len 100 -f _NET_WM_NAME 8t | grep WM_NAME | sed 's/.*= //g' | xargs)"
+
+	if [ "$1" == "noprint" ]; then
+		true
+	else
+		echo -e "${GREEN}Operating system   ${NORMAL} : ${OS}
+${GREEN}OS Architecture    ${NORMAL} : ${OS_ARCH}
+${GREEN}Kernel             ${NORMAL} : ${KERNEL}
+${GREEN}Raspberry Pi Model ${NORMAL} : ${MODEL}
+${GREEN}RAM Size           ${NORMAL} : ${RAM_SIZE}
+${GREEN}Image Version      ${NORMAL} : ${IMAGE_VERSION}
+${GREEN}Installed Packages ${NORMAL} :${INSTALLED_PACKAGES}
+${GREEN}Uptime             ${NORMAL} : ${UPTIME}
+${GREEN}Resolution         ${NORMAL} : ${RESOLUTION}
+${GREEN}Desktop Environment${NORMAL} : ${DESKTOP_ENVIRONMENT}
+${GREEN}Window Manager     ${NORMAL} : ${WINDOW_MANAGER}"
+	fi
+}
+
+sudo_password() {
+	if ! sudo -nv &>/dev/null; then 
+		echo -n "Enter password: "
+		read -s SUDO_PW 
+		echo
+
+		echo -n "Authenticating... "
+		echo "$SUDO_PW" | sudo -S ls &>/dev/null || error "Authentication Failed." 
+		echo "Done."
+	fi
+}
+
+sudo_password && sudo apt install x11-utils rpi-imager
+
+case $1 in
+	-h|--help)
+		show_help_message
+	;;
+	-d|--device-info)
+		shift
+		if [ "$1" == "--noprint" ]; then
+			get_device_info noprint
+		else 
+			get_device_info
+		fi
+	;;
+esac
+#echo "$(echo "apt ($(apt list --installed 2>/dev/null | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"

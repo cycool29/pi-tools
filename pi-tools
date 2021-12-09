@@ -15,7 +15,7 @@ BOLD="\e[1m"
 UNDERLINE="\e[4m"
 INVERTED="\e[7m"
 NORMAL="\e[0m"
-
+DIM="\e[2m"
 
 error() {
 	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}$1${NORMAL}" 1>&2
@@ -58,7 +58,7 @@ get_device_info() {
 		echo -e "${GREEN}Image Version      ${NORMAL} : ${IMAGE_VERSION}"
 		echo -e "${GREEN}Installed Packages ${NORMAL} :${INSTALLED_PACKAGES}"
 		echo -e "${GREEN}Uptime             ${NORMAL} : ${UPTIME}"
-		echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo "Not available"; else echo "${RESOLUTION}"; fi)"
+		echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DIM}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
 		echo -e "${GREEN}Desktop Environment${NORMAL} : ${DESKTOP_ENVIRONMENT}"
 		echo -e "${GREEN}Window Manager     ${NORMAL} : ${WINDOW_MANAGER}"
 	fi

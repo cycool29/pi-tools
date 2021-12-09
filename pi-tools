@@ -58,7 +58,7 @@ get_device_info() {
 		echo -e "${GREEN}Image Version      ${NORMAL} : ${IMAGE_VERSION}"
 		echo -e "${GREEN}Installed Packages ${NORMAL} :${INSTALLED_PACKAGES}"
 		echo -e "${GREEN}Uptime             ${NORMAL} : ${UPTIME}"
-		echo -e "${GREEN}Resolution         ${NORMAL} : $(echo ${RESOLUTION} || echo "Not available")"
+		echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo "Not available"; else echo "${RESOLUTION}"; fi)"
 		echo -e "${GREEN}Desktop Environment${NORMAL} : ${DESKTOP_ENVIRONMENT}"
 		echo -e "${GREEN}Window Manager     ${NORMAL} : ${WINDOW_MANAGER}"
 	fi
@@ -76,7 +76,7 @@ sudo_password() {
 	fi
 }
 
-sudo_password && sudo apt install x11-utils rpi-imager
+#~ sudo_password && sudo apt install x11-utils rpi-imager
 
 case $1 in
 	-h|--help)

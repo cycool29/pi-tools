@@ -10,6 +10,7 @@ LIGHT_GREEN="\e[92m"
 LIGHT_YELLOW="\e[93m"
 LIGHT_BLUE="\e[94m"
 CYAN="\e[36m"
+LIGHT_CYAN="\e[96m"
 WHITE="\e[97m"
 DARK_GREY="\e[90m"
 BOLD="\e[1m"
@@ -19,14 +20,24 @@ NORMAL="\e[0m"
 DIM="\e[2m"
 
 error() {
-	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}$1${NORMAL}" 1>&2
+	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${1}${NORMAL}" 
 	exit 1
 }
 
+question() {
+	echo -e "${YELLOW}${BOLD}[?]${NORMAL} ${LIGHT_YELLOW}$1${NORMAL}" 
+}
 
-error() {
-	echo -e "${YELLOW}${BOLD}[!]${NORMAL} ${LIGHT_YELLOW}$1${NORMAL}" 1>&2
-	exit 1
+status() { 
+	echo -e "${CYAN}${BOLD}[-]${NORMAL} ${LIGHT_CYAN}$1${NORMAL}" 
+}
+
+status_bold() { 
+	echo -e "${CYAN}${BOLD}[-]${NORMAL} ${LIGHT_CYAN}${BOLD}$1${NORMAL}" 
+}
+
+success() { 
+	echo -e "${GREEN}${BOLD}[✔]${NORMAL} ${LIGHT_GREEN}$1${NORMAL}" 
 }
 
 show_help_message() {
@@ -42,42 +53,53 @@ get_device_info() {
 	MODEL="$(grep Model  < /proc/cpuinfo | xargs | sed 's/Model : //g' )"
 	RAM_SIZE="$(echo "scale=2 ; $( awk '/MemTotal/ {print $2}' /proc/meminfo ) / 1024000 " | bc ) GB"
 	IMAGE_VERSION="$(grep 'Raspberry Pi reference'  < /etc/rpi-issue | sed 's/Raspberry Pi reference //g')"
-	INSTALLED_PACKAGES="$(echo " apt ($(apt list --installed 2>/dev/null | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")$([ -a "$HOME/.local/share/applications/pi-apps.desktop" ] && [ "$(echo "$($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed)")" != "" ] && echo " pi-apps ($($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed | wc -l))")"
+	INSTALLED_PACKAGES="$(echo "dpkg ($(dpkg --get-selections | grep -v deinstall | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")$([ -a "$HOME/.local/share/applications/pi-apps.desktop" ] && [ "$($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed)" != "" ] && echo " pi-apps ($($(grep Exec < "$HOME/.local/share/applications/pi-apps.desktop" | sed s/Exec=//g | sed s/gui/api/g) list_apps installed | wc -l))")"
 	UPTIME="$(uptime -p | sed "s/up //g" | sed s/,//g)"
 	RESOLUTION="$(fbset -i  | grep "mode " | tr -d '"' | tr -d "mode ")"
-	DESKTOP_ENVIRONMENT="$(echo "$XDG_CURRENT_DESKTOP")"
+	DESKTOP_ENVIRONMENT="$XDG_CURRENT_DESKTOP"
 	WINDOW_MANAGER="$(xprop -id "$(xprop -root -notype _NET_SUPPORTING_WM_CHECK | sed 's/.*# //')" -notype -len 100 -f _NET_WM_NAME 8t | grep WM_NAME | sed 's/.*= //g' | xargs)"
 
 	if [ "$1" == "noprint" ]; then
 		true
 	else
-		echo -e "${GREEN}Operating system   ${NORMAL} : ${OS}"
-		echo -e "${GREEN}OS Architecture    ${NORMAL} : ${OS_ARCH}"
-		echo -e "${GREEN}Kernel             ${NORMAL} : ${KERNEL}"
-		echo -e "${GREEN}Raspberry Pi Model ${NORMAL} : ${MODEL}"
-		echo -e "${GREEN}RAM Size           ${NORMAL} : ${RAM_SIZE}"
-		echo -e "${GREEN}Image Version      ${NORMAL} : ${IMAGE_VERSION}"
-		echo -e "${GREEN}Installed Packages ${NORMAL} :${INSTALLED_PACKAGES}"
-		echo -e "${GREEN}Uptime             ${NORMAL} : ${UPTIME}"
+		echo -e "${GREEN}Operating system   ${NORMAL} : $(if [ "${OS}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS}"; fi)"
+		echo -e "${GREEN}OS Architecture    ${NORMAL} : $(if [ "${OS_ARCH}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS_ARCH}"; fi)"
+		echo -e "${GREEN}Kernel             ${NORMAL} : $(if [ "${KERNEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${KERNEL}"; fi)"
+		echo -e "${GREEN}Raspberry Pi Model ${NORMAL} : $(if [ "${MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${MODEL}"; fi)"
+		echo -e "${GREEN}RAM Size           ${NORMAL} : $(if [ "${RAM_SIZE}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RAM_SIZE}"; fi)"
+		echo -e "${GREEN}Image Version      ${NORMAL} : $(if [ "${IMAGE_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${IMAGE_VERSION}"; fi)"
+		echo -e "${GREEN}Installed Packages ${NORMAL} : $(if [ "${INSTALLED_PACKAGES}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${INSTALLED_PACKAGES}"; fi)"
+		echo -e "${GREEN}Uptime             ${NORMAL} : $(if [ "${UPTIME}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${UPTIME}"; fi)"
 		echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
-		echo -e "${GREEN}Desktop Environment${NORMAL} : ${DESKTOP_ENVIRONMENT}"
-		echo -e "${GREEN}Window Manager     ${NORMAL} : ${WINDOW_MANAGER}"
+		echo -e "${GREEN}Desktop Environment${NORMAL} : $(if [ "${DESKTOP_ENVIRONMENT}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${DESKTOP_ENVIRONMENT}"; fi)"
+		echo -e "${GREEN}Window Manager     ${NORMAL} : $(if [ "${WINDOW_MANAGER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${WINDOW_MANAGER}"; fi)"
 	fi
 }
 
 sudo_password() {
-	if ! sudo -nv &>/dev/null; then 
-		echo -n "Enter password: "
-		read -s SUDO_PW 
-		echo
-
-		echo -n "Authenticating... "
-		echo "$SUDO_PW" | sudo -S ls &>/dev/null || error "Authentication Failed." 
-		echo "Done."
+	if ! sudo -n ls &>/dev/null; then 
+		status "This operation needs root access."
+		sudo -S true || error "Authentication Failed." 
+		success "Root authentication success."
 	fi
 }
 
-#~ sudo_password && sudo apt install x11-utils rpi-imager
+update_apps() {
+	sudo_password
+	status_bold "Updating APT"
+	status "Updating APT package list..."
+	OUTPUT="$(sudo apt update --allow-releaseinfo-change 2>&1)" || error "Failed to update APT package list.:\n${OUTPUT}"
+	if echo "$OUTPUT" | grep -q "All packages are up to date"; then
+		success "All APT packages are up to date." 
+	elif echo "$OUTPUT" | grep -q 'can be upgraded'; then
+		echo "$OUTPUT" | grep 'can be upgraded' --color=None | sed "s/Run 'apt list --upgradable' to see it.//g"
+	else 
+		error "pi-tools failed to parse APT output:\n$OUTPUT" 
+		
+	fi
+}
+
+
 
 case $1 in
 	-h|--help)
@@ -90,6 +112,10 @@ case $1 in
 		else 
 			get_device_info
 		fi
+	;;
+	-u|--update)
+		shift
+		update_apps
 	;;
 esac
 #echo "$(echo "apt ($(apt list --installed 2>/dev/null | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"

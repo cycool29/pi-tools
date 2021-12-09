@@ -108,9 +108,9 @@ case $1 in
 	-d|--device-info)
 		shift
 		if [ "$1" == "--noprint" ]; then
-			get_device_info noprint
+			get_device_info noprint 2>/dev/null
 		else 
-			get_device_info
+			get_device_info 2>/dev/null
 		fi
 	;;
 	-u|--update)

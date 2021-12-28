@@ -1,11 +1,7 @@
 #!/bin/bash
 # shellcheck disable=SC2155,SC2094,SC2034,SC2059
 
-if ! pi-tools_help_message &>/dev/null; then
-	echo -e "\e[31m\e[1m[!]\e[0m \e[91mThis script cannot run without sourcing the pi-tools api script.\e[0m" 
-	echo -e "\e[31m\e[1m[!]\e[0m \e[91mPlease do not run this script standalone.\e[0m" 
-	exit 1
-fi
+source "${DIRECTORY}/api" || error "Failed to source api."
 
 sudo_password || exit 1
 ROOT_PARTITION="$(sudo findmnt / -o source -n)"

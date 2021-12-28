@@ -1,10 +1,6 @@
 #!/bin/bash
 
-if ! pi-tools_help_message &>/dev/null; then
-	echo -e "\e[31m\e[1m[!]\e[0m \e[91mThis script cannot run without sourcing the pi-tools api script.\e[0m" 
-	echo -e "\e[31m\e[1m[!]\e[0m \e[91mPlease do not run this script standalone.\e[0m" 
-	exit 1
-fi
+source "${DIRECTORY}/api" || error "Failed to source api."
 
 OS="$(grep PRETTY_NAME  < /etc/os-release | tr -d '"' | awk -F= '{print $2}')" 
 OS_ARCH="$(dpkg --print-architecture)" 
@@ -26,24 +22,20 @@ CURRENT_USER="$(whoami)"
 SOC_VERSION="$(grep Hardware < /proc/cpuinfo | cut -c12-18)"
 GPU_TEMPERATURE="$(sed s/temp=//g <<< $(vcgencmd measure_temp))"
 
-if echo "$@" | grep -q noprint; then
-	true
-else
-	echo -e "${GREEN}Operating system   ${NORMAL} : $(if [ "${OS}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS}"; fi)"
-	echo -e "${GREEN}OS Architecture    ${NORMAL} : $(if [ "${OS_ARCH}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS_ARCH}"; fi)"
-	echo -e "${GREEN}Kernel             ${NORMAL} : $(if [ "${KERNEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${KERNEL}"; fi)"
-	echo -e "${GREEN}Raspberry Pi Model ${NORMAL} : $(if [ "${MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${MODEL}"; fi)"
-	echo -e "${GREEN}RAM Size           ${NORMAL} : $(if [ "${RAM_SIZE}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RAM_SIZE}"; fi)"
-	echo -e "${GREEN}Image Version      ${NORMAL} : $(if [ "${IMAGE_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${IMAGE_VERSION}"; fi)"
-	echo -e "${GREEN}Installed Packages ${NORMAL} : $(if [ "${INSTALLED_PACKAGES}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${INSTALLED_PACKAGES}"; fi)"
-	echo -e "${GREEN}Uptime             ${NORMAL} : $(if [ "${UPTIME}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${UPTIME}"; fi)"
-	echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
-	echo -e "${GREEN}Desktop Environment${NORMAL} : $(if [ "${DESKTOP_ENVIRONMENT}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${DESKTOP_ENVIRONMENT}"; fi)"
-	echo -e "${GREEN}Window Manager     ${NORMAL} : $(if [ "${WINDOW_MANAGER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${WINDOW_MANAGER}"; fi)"
-	echo -e "${GREEN}OpenGL Version     ${NORMAL} : $(if [ "${OPENGL_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OPENGL_VERSION}"; fi)"
-	echo -e "${GREEN}GPU Model          ${NORMAL} : $(if [ "${GPU_MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${GPU_MODEL}"; fi)"
-	echo -e "${GREEN}Local IP Address   ${NORMAL} : $(if [ "${LOCAL_IP}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${LOCAL_IP}"; fi)"
-	echo -e "${GREEN}Public IP Address  ${NORMAL} : $(if [ "${PUBLIC_IP}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${PUBLIC_IP}"; fi)"
-	echo -e "${GREEN}Current User       ${NORMAL} : $(if [ "${CURRENT_USER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CURRENT_USER}"; fi)"
-	echo -e "${GREEN}SoC Version        ${NORMAL} : $(if [ "${SOC_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${SOC_VERSION}"; fi)"
-fi
+echo -e "${GREEN}Operating system   ${NORMAL} : $(if [ "${OS}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS}"; fi)"
+echo -e "${GREEN}OS Architecture    ${NORMAL} : $(if [ "${OS_ARCH}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS_ARCH}"; fi)"
+echo -e "${GREEN}Kernel             ${NORMAL} : $(if [ "${KERNEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${KERNEL}"; fi)"
+echo -e "${GREEN}Raspberry Pi Model ${NORMAL} : $(if [ "${MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${MODEL}"; fi)"
+echo -e "${GREEN}RAM Size           ${NORMAL} : $(if [ "${RAM_SIZE}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RAM_SIZE}"; fi)"
+echo -e "${GREEN}Image Version      ${NORMAL} : $(if [ "${IMAGE_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${IMAGE_VERSION}"; fi)"
+echo -e "${GREEN}Installed Packages ${NORMAL} : $(if [ "${INSTALLED_PACKAGES}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${INSTALLED_PACKAGES}"; fi)"
+echo -e "${GREEN}Uptime             ${NORMAL} : $(if [ "${UPTIME}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${UPTIME}"; fi)"
+echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
+echo -e "${GREEN}Desktop Environment${NORMAL} : $(if [ "${DESKTOP_ENVIRONMENT}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${DESKTOP_ENVIRONMENT}"; fi)"
+echo -e "${GREEN}Window Manager     ${NORMAL} : $(if [ "${WINDOW_MANAGER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${WINDOW_MANAGER}"; fi)"
+echo -e "${GREEN}OpenGL Version     ${NORMAL} : $(if [ "${OPENGL_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OPENGL_VERSION}"; fi)"
+echo -e "${GREEN}GPU Model          ${NORMAL} : $(if [ "${GPU_MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${GPU_MODEL}"; fi)"
+echo -e "${GREEN}Local IP Address   ${NORMAL} : $(if [ "${LOCAL_IP}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${LOCAL_IP}"; fi)"
+echo -e "${GREEN}Public IP Address  ${NORMAL} : $(if [ "${PUBLIC_IP}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${PUBLIC_IP}"; fi)"
+echo -e "${GREEN}Current User       ${NORMAL} : $(if [ "${CURRENT_USER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CURRENT_USER}"; fi)"
+echo -e "${GREEN}SoC Version        ${NORMAL} : $(if [ "${SOC_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${SOC_VERSION}"; fi)"

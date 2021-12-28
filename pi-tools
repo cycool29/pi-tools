@@ -1,6 +1,9 @@
 #!/bin/bash
 # shellcheck disable=SC2155,SC2094,SC2034,SC2059
 
+export DIRECTORY="$(dirname "$(readlink -f "$0")")"
+source "${DIRECTORY}/api" || error "Failed to source api."
+
 update_apps() {
 	sudo_password
 	status_bold "Updating APT"
@@ -32,40 +35,13 @@ set_keyboard() {
 	success_bold "Done"
 }
 
-get_debian_version(){
-	DEBIAN_VERSION="$(cut -d . -f 1 < /etc/debian_version)" || error "Failed to retrieve Debian version number.\nPLEASE report to https://github.com/cycool29/pi-tools/issue if you are on Raspberry Pi."
-}
-
-trap "error 'Exiting now.'" INT
-
-sudo_password
-while read -r i; do
-	if [ "$(dpkg -l "$i" 2> /dev/null | tail -n 1 | cut -d ' ' -f 1)" != "ii" ]; then
-		PACKAGE_TO_INSTALL+="$i "
-	fi
-done <"${DIRECTORY}/dependencies"
-
-[ "${PACKAGE_TO_INSTALL}" != '' ] && status_bold "Installing required dependencies" && (OUTPUT="$(sudo apt-get update 2>&1 && sudo apt-get install "${PACKAGE_TO_INSTALL}" 2>&1)" || error "Failed to install required dependencies.\nError:\n${OUTPUT}")
-
-if ! ping -q -c1 example.com &>/dev/null; then
-	status "No internet connection (failed to ping example.com), running in no internet mode..."
-	NO_INTERNET=1
-fi
-get_pi_version
-get_device_info noprint
-get_debian_version
-
 case $1 in
 	-h|--help)
 		show_help_message
 	;;
 	d|device-info)
 		shift
-		if [ "$1" == "--noprint" ]; then
-			get_device_info noprint
-		else 
-			get_device_info
-		fi
+		"${DIRECTORY}/scripts/get-device-info" || exit 1
 	;;
 	u|update-apps)
 		shift
@@ -81,6 +57,6 @@ case $1 in
 	;;
 	*)
 		error "Option not recognized.\n" --no-exit
-		show_help_message
+		pi-tools_help_message
 esac
 #echo "$(echo "apt ($(apt list --installed  | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"

@@ -1,0 +1,91 @@
+#!/bin/bash
+
+DIRECTORY="$(dirname "$(readlink -f "$0")")"
+
+#text formatting variables
+RED="\e[31m"
+GREEN="\e[32m"
+YELLOW="\e[33m"
+BLUE="\e[34m"
+CYAN="\e[36m"
+LIGHT_RED="\e[91m"
+LIGHT_GREEN="\e[92m"
+LIGHT_YELLOW="\e[93m"
+LIGHT_BLUE="\e[94m"
+LIGHT_CYAN="\e[96m"
+WHITE="\e[97m"
+DARK_GREY="\e[90m"
+BOLD="\e[1m"
+UNDERLINE="\e[4m"
+INVERTED="\e[7m"
+NORMAL="\e[0m"
+DIM="\e[2m"
+
+error() {
+	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${1}${NORMAL}" 
+	if ! echo "$@" | grep -q 'no-exit'; then
+		exit 1
+	fi
+}
+
+question() {
+	echo -e "${YELLOW}${BOLD}[?]${NORMAL} ${LIGHT_YELLOW}$1${NORMAL}" 
+}
+
+status() { 
+	echo -e "${CYAN}${BOLD}[-]${NORMAL} ${LIGHT_CYAN}$1${NORMAL}" 
+}
+
+status_bold() { 
+	echo -e "${CYAN}${BOLD}[-]${NORMAL} ${LIGHT_CYAN}${BOLD}$1${NORMAL}" 
+}
+
+success() { 
+	echo -e "${GREEN}${BOLD}[✔]${NORMAL} ${LIGHT_GREEN}$1${NORMAL}" 
+}
+
+success_bold() {
+	echo -e "${GREEN}${BOLD}[✔]${NORMAL} ${LIGHT_GREEN}${BOLD}$1${NORMAL}"
+}
+
+pi-tools_help_message() {
+	echo "╱╱╱╱╱╱╱╭╮╱╱╱╱╱╱╭╮
+╱╱╱╱╱╱╭╯╰╮╱╱╱╱╱┃┃
+╭━━┳╮╱╰╮╭╋━━┳━━┫┃╭━━╮
+┃╭╮┣╋━━┫┃┃╭╮┃╭╮┃┃┃━━┫
+┃╰╯┃┣━━┫╰┫╰╯┃╰╯┃╰╋━━┃
+┃╭━┻╯╱╱╰━┻━━┻━━┻━┻━━╯
+┃┃
+╰╯"
+	echo "pi-tools (pt) 1.0 on Raspberry Pi ${PI_VERSION}, $(dpkg --print-architecture)"
+	echo "Installed at ${DIRECTORY}."
+	echo
+	echo "pi-tools is a command-line tool to access almost all settings, functions, etc, of your Raspberry Pi."
+   
+}
+
+sudo_password() {
+	if ! sudo -n ls &>/dev/null; then 
+		status "This operation needs root access."
+		sudo -S true || error "Authentication Failed." 
+		success "Root authentication success."
+	fi
+}
+
+get_pi_version() {
+	if grep -q "^Revision\s*:\s*00[0-9a-fA-F][0-9a-fA-F]$" /proc/cpuinfo || grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]0[0-36][0-9a-fA-F]$" /proc/cpuinfo ; then
+		PI_VERSION=1
+	elif grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]04[0-9a-fA-F]$" /proc/cpuinfo; then
+		PI_VERSION=2
+	elif grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]0[9cC][0-9a-fA-F]$" /proc/cpuinfo; then
+		PI_VERSION=3
+	elif grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F]3[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$" /proc/cpuinfo; then
+		PI_VERSION=4
+	else
+		error "Raspberry Pi version not detected.\nIf you are using a Raspberry Pi 1, 2, 3 or 4, PLEASE report to https://github.com/cycool29/pi-tools/issue."
+	fi
+}
+
+if ! (return 0 2>/dev/null); then
+	echo wow
+fi

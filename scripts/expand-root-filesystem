@@ -1,0 +1,88 @@
+#!/bin/bash
+# shellcheck disable=SC2155,SC2094,SC2034,SC2059
+
+if ! pi-tools_help_message &>/dev/null; then
+	echo -e "\e[31m\e[1m[!]\e[0m \e[91mThis script cannot run without sourcing the pi-tools api script.\e[0m" 
+	echo -e "\e[31m\e[1m[!]\e[0m \e[91mPlease do not run this script standalone.\e[0m" 
+	exit 1
+fi
+
+sudo_password || exit 1
+ROOT_PARTITION="$(sudo findmnt / -o source -n)"
+ROOT_DEVICE="/dev/$(sudo lsblk -no pkname "$ROOT_PARTITION")"
+
+PARTITION_NUMBER="$(echo "$ROOT_PARTITION" | grep -o "[[:digit:]]*$")"
+
+if [ "${PARTITION_NUMBER}" -ne 2 ]; then
+	error "Your partition layout is not currently supported by this tool. You are probably using NOOBS, in which case your root filesystem is already expanded anyway." 
+fi
+
+LAST_PARTITION_NUMBER=$(sudo parted "$ROOT_DEVICE" -ms unit s p | tail -n 1 | cut -f 1 -d:)
+if [ "${LAST_PARTITION_NUMBER}" -ne "${PARTITION_NUMBER}" ]; then
+	error "${ROOT_PARTITION} is not the last partition. Don't know how to expand."
+fi
+
+PARTITION_START=$(sudo parted "${ROOT_DEVICE}" -ms unit s p | grep "^${PARTITION_NUMBER}" | cut -f 2 -d: | sed 's/[^0-9]//g')
+[ "${PARTITION_START}" ] || return 1
+
+echo -e "${GREEN}Root Device           ${NORMAL} : ${ROOT_DEVICE}"
+echo -e "${GREEN}Root Partition        ${NORMAL} : ${ROOT_PARTITION}"
+echo -e "${GREEN}Root Partition Offset ${NORMAL} : $(sudo parted "${ROOT_DEVICE}" -ms unit gb p | grep "^${PARTITION_NUMBER}" | cut -f 2 -d: | sed 's/[^0-9]//g' | sed s/^0*//g)GB"
+
+status "Changing root flesystem partition table using fdisk..."
+OUTPUT="$(printf "p
+d
+${PARTITION_NUMBER}
+n
+p
+${PARTITION_NUMBER}
+${PARTITION_START}
+p
+w" | sudo fdisk "${ROOT_DEVICE}" 2>&1)" || error "Failed to change root filesystem partition table using fdisk."
+
+	cat <<EOF | sudo tee /etc/init.d/resize2fs_once &>/dev/null &&
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          resize2fs_once
+# Required-Start:
+# Required-Stop:
+# Default-Start: 3
+# Default-Stop:
+# Short-Description: Resize the root filesystem to fill partition
+# Description:
+### END INIT INFO
+. /lib/lsb/init-functions
+case "\$1" in
+  start)
+    log_daemon_msg "Starting resize2fs_once" &&
+    resize2fs "$ROOT_PART" &&
+    update-rc.d resize2fs_once remove &&
+    rm /etc/init.d/resize2fs_once &&
+    log_end_msg \$?
+    ;;
+  *)
+	echo "Usage: \$0 start" >&2
+	exit 3
+	;;
+esac
+EOF
+status "Making '/etc/init.d/resize2fs_once' executable..."
+OUTPUT="$(sudo chmod +x /etc/init.d/resize2fs_once 2>&1)" || error "Failed to make '/etc/init.d/resize2fs_once' executable.\nOutput:\n${OUTPUT}"
+status "Installing resize2fs_once init script..."
+OUTPUT="$(sudo update-rc.d resize2fs_once defaults 2>&1)" || error "Failed to install resize2fs_once init script.\nOutput:\n${OUTPUT}"
+success_bold "Root partition has been resized.\nThe filesystem will be enlarged upon the next reboot."
+question "Do you want to reboot now?"
+read -rp "[y/n] " INPUT
+case "$INPUT" in
+	y|Y|yes|Yes|YES)
+		printf "${ESC}[?25l"
+		for i in {6..1}; do
+		  echo -ne "Rebooting in: $i\r (Use Ctrl-C to abort) " && sleep 1
+		done
+		OUTPUT="$(sudo reboot)" || error "Failed to reboot.\nOutput:\n${OUTPUT}"
+	;;
+	*)
+		echo "Exiting now."
+		exit 0
+	;;
+esac

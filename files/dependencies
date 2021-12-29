@@ -6,3 +6,5 @@ console-setup
 fdisk
 mesa-utils
 libraspberrypi-bin
+rfkill
+bluez

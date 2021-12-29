@@ -1,0 +1,46 @@
+#!/bin/bash
+
+
+turn_bluetooth() {
+	case $1 in 
+		on)
+			status "Turning on Bluetooth..."
+			sudo_password || exit 1
+			sudo rfkill unblock bluetooth || error "Failed to turn on Bluetooth."
+			sudo service bluetooth restart 
+		;;
+		off)
+			status "Turning off Bluetooth..."
+			sudo_password || exit 1
+			sudo rfkill block bluetooth || error "Failed to turn off Bluetooth."
+		;;
+	esac
+}
+
+echo "$DIRECTORY"
+echo "$@"
+
+case "$1" in
+	connect)
+		shift
+		DEVICE="$(echo "$@" | tr ' ' '\n' | grep -v -- "^-" | xargs)"
+		grep -q -- '--pair-only' <(echo "$@") && PAIR_ONLY=1
+		
+		status "Scanning available devices..."
+		bluetoothctl --timeout 15 scan on || error "Failed to scan available devices."
+			
+		
+		if [[ "$(echo "${DEVICE}" | tr '[:lower:]' '[:upper:]')" =~ ^([a-fA-F0-9]{2}:){5}[a-fA-F0-9]{2}$ ]]; then #given mac address
+			DEVICE="$(echo "${DEVICE}" |  tr '[:lower:]' '[:upper:]')"
+			status "Given MAC Address: ${DEVICE}"
+			status_bold "Connecting to ${DEVICE}"
+			turn_bluetooth on || exit 1
+			status "Powering on Bluetooth controller..."
+			bluetoothctl power off; bluetoothctl power on || error "Failed to power on Bluetooth controller."
+			if grep -q "${DEVICE}" <(bluetoothctl paired-devices); then 
+				success "${DEVICE} already paired."
+				[ "${PAIR_ONLY}" == 1 ] && exit 0
+			fi
+		fi
+	;;
+esac

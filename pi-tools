@@ -2,7 +2,9 @@
 # shellcheck disable=SC2155,SC2094,SC2034,SC2059
 
 export DIRECTORY="$(dirname "$(readlink -f "$0")")"
+set -a 
 source "${DIRECTORY}/api" || error "Failed to source api."
+set +a
 
 update_apps() {
 	sudo_password
@@ -42,6 +44,10 @@ case $1 in
 	d|device-info)
 		shift
 		"${DIRECTORY}/scripts/get-device-info" || exit 1
+	;;
+	bt|bluetooth)
+		shift
+		DIRECTORY=$DIRECTORY "${DIRECTORY}/scripts/bluetooth" "$@" || exit 1
 	;;
 	u|update-apps)
 		shift

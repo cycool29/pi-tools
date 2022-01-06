@@ -1,0 +1,23 @@
+#!/bin/bash 
+
+WIFI_INTERFACE="$(for dev in /sys/class/net/*; do
+    [ -e "$dev"/wireless ] && echo "${dev##*/}"
+done)"
+
+
+if [ "$(wc -l <<<"$WIFI_INTERFACE")" != 1 ]; then
+    question "Found $(wc -l <<<"$WIFI_INTERFACE") wifi interfaces. Which one do you want?"
+    WIFI_INTERFACE="$(echo "wlan0 wlan1" | fzf --multi --cycle --height="$(wc -l <<<"$WIFI_INTERFACE")")"
+fi
+
+iwconfig wlan0 | grep "Link" | xargs
+
+sudo rfkill unblock wifi
+sudo ifconfig "$WIFI_INTERFACE" up
+
+status "Scannning WiFi..."
+sudo iwlist "$WIFI_INTERFACE" scan
+
+WIFI_LIST="$(for wifi in $(sudo iwlist wlan0 scan | grep ESSID | sed s/ESSID://g | sed 's/"//g'); do echo $wifi | xargs; done)"
+
+fzf --cycle --height="$(("$(echo "$WIFI_LIST" | wc -l)"+2))"<<<"$WIFI_LIST"

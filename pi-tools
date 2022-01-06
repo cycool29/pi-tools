@@ -47,7 +47,7 @@ case $1 in
 	;;
 	bt|bluetooth)
 		shift
-		DIRECTORY=$DIRECTORY "${DIRECTORY}/scripts/bluetooth" "$@" || exit 1
+		"${DIRECTORY}/scripts/bluetooth" "$@" || exit 1
 	;;
 	u|update-apps)
 		shift
@@ -60,6 +60,10 @@ case $1 in
 	ef|expand-filesystem)
 		shift
 		expand_rootfs
+	;;
+	wf|wifi)
+		shift
+		"${DIRECTORY}/scripts/wifi" "$@" || exit 1
 	;;
 	*)
 		error "Option not recognized.\n" --no-exit

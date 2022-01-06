@@ -112,7 +112,7 @@ prepare() {
 		fi
 	done <"${DIRECTORY}/files/dependencies"
 
-	chmod +x "${DIRECTORY}/scripts/*" &>/dev/null
+	chmod +x ${DIRECTORY}/scripts/*
 }
 
 if ! (return 0 &>/dev/null); then
@@ -125,7 +125,7 @@ if ! (return 0 &>/dev/null); then
 		error "No argument was given."
 	fi
 else
-	prepare || exit 1
+	prepare 
 fi
 
 

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-source "${DIRECTORY}/api" || error "Failed to source api."
-
 OS="$(grep PRETTY_NAME  < /etc/os-release | tr -d '"' | awk -F= '{print $2}')" 
 OS_ARCH="$(dpkg --print-architecture)" 
 KERNEL="$(uname -mrs)" 

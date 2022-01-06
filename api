@@ -1,6 +1,7 @@
 #!/bin/bash
 
 [ "$DIRECTORY" ] || DIRECTORY="$(dirname "$(readlink -f "$0")")"
+echo $DIRECTORY
 
 #text formatting variables
 RED="\e[31m"
@@ -91,29 +92,40 @@ get_codename() {
     lsb_release -sc
 }
 
+check_internet() {
+	ping -q -c1 example.com &>/dev/null 
+	return $?
+}
+
+install_pi-tools_dependencies() {
+	sudo_password || exit 1
+	(sudo apt-get update --allow-releaseinfo-change 2>&1 && sudo apt-get install -qq --no-install-recommends $(cat "${DIRECTORY}/files/dependencies")) || error "Failed to install pi-tools dependencies."
+}
+
 trap "error 'Exiting now.'" INT
 
-sudo_password
-while read -r i; do
-	if ! dpkg -s "$i" &>/dev/null ; then
-		PACKAGE_TO_INSTALL+="$i "
-	fi
-done <"${DIRECTORY}/files/dependencies"
+prepare() {
+	while read -r i; do
+		if ! dpkg -s "$i" &>/dev/null ; then
+			install_pi-tools_dependencies || exit 1
+			break
+		fi
+	done <"${DIRECTORY}/files/dependencies"
 
-[ "${PACKAGE_TO_INSTALL}" != '' ] && status_bold "Installing required dependencies" && (OUTPUT="$(sudo apt-get update 2>&1 && sudo apt-get install ${PACKAGE_TO_INSTALL} 2>&1)" || error "Failed to install required dependencies.\nError:\n${OUTPUT}")
-
-if ! ping -q -c1 example.com &>/dev/null; then
-	status "No internet connection (failed to ping example.com), running in no internet mode..."
-	NO_INTERNET=1
-fi
-
-chmod +x "${DIRECTORY}/scripts/*" &>/dev/null
+	chmod +x "${DIRECTORY}/scripts/*" &>/dev/null
+}
 
 if ! (return 0 &>/dev/null); then
 	if [ "$@" ]; then
+		echo wow
 		export NOT_SOURCED=1 #remember not sourced 
 		"$@"
+		exit $?
 	else
 		error "No argument was given."
 	fi
+else
+	prepare || exit 1
 fi
+
+

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+status_bold "Configuring keyboard"
+sudo_password
+status "Please select the keymap of the keyboard."
+sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"$(grep "$(cut -c23- < "${DIRECTORY}/keymaps" | fzf --height 20 --cycle)" < "${DIRECTORY}/keymaps" | cut -c1-22 | xargs)\"/"
+status "Configuring keyboard-configuration..."
+sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration || error "Failed to configure keyboard-configuration."
+status "Enabling keyboard-setup initscript..."
+sudo -E invoke-rc.d keyboard-setup start || error "Failed to enable keyboard-setup initscript."
+status "Setting up keyboard..."
+sudo -E setsid sh -c 'exec setupcon -k --force <> $(echo "/dev/tty$(sudo fgconsole)") >&0' || error "Failed to set up the font and the keyboard on the console.\nOutput:\n${OUTPUT}"
+sudo -E udevadm trigger --subsystem-match=input --action=change || error "Failed to trigger input change in udevadm.\nOutput:\n${OUTPUT}"
+success_bold "Done"

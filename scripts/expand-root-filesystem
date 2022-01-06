@@ -1,8 +1,6 @@
 #!/bin/bash
 # shellcheck disable=SC2155,SC2094,SC2034,SC2059
 
-source "${DIRECTORY}/api" || error "Failed to source api."
-
 sudo_password || exit 1
 ROOT_PARTITION="$(sudo findmnt / -o source -n)"
 ROOT_DEVICE="/dev/$(sudo lsblk -no pkname "$ROOT_PARTITION")"
@@ -26,7 +24,7 @@ echo -e "${GREEN}Root Partition        ${NORMAL} : ${ROOT_PARTITION}"
 echo -e "${GREEN}Root Partition Offset ${NORMAL} : $(sudo parted "${ROOT_DEVICE}" -ms unit gb p | grep "^${PARTITION_NUMBER}" | cut -f 2 -d: | sed 's/[^0-9]//g' | sed s/^0*//g)GB"
 
 status "Changing root flesystem partition table using fdisk..."
-OUTPUT="$(printf "p
+printf "p
 d
 ${PARTITION_NUMBER}
 n
@@ -34,7 +32,7 @@ p
 ${PARTITION_NUMBER}
 ${PARTITION_START}
 p
-w" | sudo fdisk "${ROOT_DEVICE}" 2>&1)" || error "Failed to change root filesystem partition table using fdisk."
+w" | sudo fdisk "${ROOT_DEVICE}" 2>&1 || error "Failed to change root filesystem partition table using fdisk."
 
 	cat <<EOF | sudo tee /etc/init.d/resize2fs_once &>/dev/null &&
 #!/bin/sh
@@ -63,9 +61,9 @@ case "\$1" in
 esac
 EOF
 status "Making '/etc/init.d/resize2fs_once' executable..."
-OUTPUT="$(sudo chmod +x /etc/init.d/resize2fs_once 2>&1)" || error "Failed to make '/etc/init.d/resize2fs_once' executable.\nOutput:\n${OUTPUT}"
+sudo chmod +x /etc/init.d/resize2fs_once || error "Failed to make '/etc/init.d/resize2fs_once' executable."
 status "Installing resize2fs_once init script..."
-OUTPUT="$(sudo update-rc.d resize2fs_once defaults 2>&1)" || error "Failed to install resize2fs_once init script.\nOutput:\n${OUTPUT}"
+sudo update-rc.d resize2fs_once defaults || error "Failed to install resize2fs_once init script."
 success_bold "Root partition has been resized.\nThe filesystem will be enlarged upon the next reboot."
 question "Do you want to reboot now?"
 read -rp "[y/n] " INPUT
@@ -75,7 +73,7 @@ case "$INPUT" in
 		for i in {6..1}; do
 		  echo -ne "Rebooting in: $i\r (Use Ctrl-C to abort) " && sleep 1
 		done
-		OUTPUT="$(sudo reboot)" || error "Failed to reboot.\nOutput:\n${OUTPUT}"
+		sudo reboot || error "Failed to reboot."
 	;;
 	*)
 		echo "Exiting now."

@@ -125,7 +125,7 @@ if ! (return 0 &>/dev/null); then
 		error "No argument was given."
 	fi
 else
-	prepare 
+	prepare
 fi
 
 

@@ -1,14 +1,27 @@
 #!/bin/bash
 
+
+
+
 # check arguments
 while [ "${1}" ]; do
 	case "${1}" in
-		--connect|-c)
+		--connect|-c) # connct to device 
 			ACTION="connect"
 			shift
 			;;
-		--disconnect|-d)
+		--disconnect|-d) # disconnect from device
 			ACTION="connect"
+			shift
+			;;
+		--off) # turn off bluetooth
+			ACTION="off"
+			turn_bluetooth off
+			shift
+			;;
+		--on) # turn on bluetooth
+			ACTION="on"
+			turn_bluetooth on
 			shift
 			;;
 		--target|-t)
@@ -19,59 +32,12 @@ while [ "${1}" ]; do
 			fi
 			shift
 			;;
-		--install-32-webVer)
-			install_32_webVer=${2}
-			shift
-			;;
-		--install-64-webVer)
-			install_32_webVer=${2}
-			shift
-			;;
 		*)
-			error "Unknown parameter: ${1}" 
+			error "Unknown argument: ${1}" 
 			;;
 	esac
 	shift
 done
 
 
-turn_bluetooth() {
-	case $1 in 
-		on)
-			status "Turning on Bluetooth..."
-			sudo_password || exit 1
-			sudo rfkill unblock bluetooth || error "Failed to turn on Bluetooth."
-			sudo service bluetooth restart 
-		;;
-		off)
-			status "Turning off Bluetooth..."
-			sudo_password || exit 1
-			sudo rfkill block bluetooth || error "Failed to turn off Bluetooth."
-		;;
-	esac
-}
-
-case "$1" in
-	connect)
-		shift
-		DEVICE="$(echo "$@" | tr ' ' '\n' | grep -v -- "^-" | xargs)"
-		grep -q -- '--pair-only' <(echo "$@") && PAIR_ONLY=1
-		
-		status "Scanning available devices..."
-		BLUETOOTH_SCAN_RESULT="$(bluetoothctl --timeout 15 scan on)" || error "Failed to scan available devices."
-		success_bold "Scan result:"
-		echo "${BLUETOOTH_SCAN_RESULT}"
-		
-		if [[ "$(echo "${DEVICE}" | tr '[:lower:]' '[:upper:]')" =~ ^([a-fA-F0-9]{2}:){5}[a-fA-F0-9]{2}$ ]]; then #given mac address
-			DEVICE="$(echo "${DEVICE}" |  tr '[:lower:]' '[:upper:]')"
-			status "Given MAC Address: ${DEVICE}"
-			
-		fi
-			status_bold "Connecting to ${DEVICE}"
-			turn_bluetooth on || exit 1
-			status "Powering on Bluetooth controller..."
-			bluetoothctl power on || error "Failed to power on Bluetooth controller."
-			
-	;;
-esac
 

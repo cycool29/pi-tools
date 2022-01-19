@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2155,SC2094,SC2034,SC2059
 
+# trap functions
+set -E
+
 export DIRECTORY="$(dirname "$(readlink -f "$0")")"
 
 # check if this script is running through a pipe or being redirected
@@ -68,6 +71,12 @@ is_dir() {
     [[ -d "${TARGET}" ]]
 }
 
+is_number() {
+    local TARGET="${1}"
+
+		[[ "${TARGET}" =~ ^[0-9]+$ ]]
+}
+
 sudo_password() {
 	if ! sudo -n ls &>/dev/null; then 
 		status "This operation needs root access."
@@ -118,7 +127,7 @@ prepare() {
 }
 
 
-scan_bluetooth() { # scan bluetooth devices, the only arg accepted is the timeout duration
+scan_bluetooth() { # scan bluetooth devices, the only 1 accepted is the timeout duration
 	TIMEOUT_DURATION="${1}"
 	bluetoothctl --timeout "${TIMEOUT_DURATION}" scan on
 }
@@ -205,15 +214,25 @@ set_keyboard() {
 	status_bold "Configuring keyboard"
 	sudo_password
 	status "Please select the keymap of the keyboard."
-	sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"$(grep "$(cut -c23- < "${DIRECTORY}/keymaps" | fzf --height 20 --cycle)" < "${DIRECTORY}/keymaps" | cut -c1-22 | xargs)\"/"
+	KEYMAP_CHOICE="$(cut -c23- < "${DIRECTORY}/files/keymaps" | fzf --height 20 --cycle)" # user choice
+	KEYMAP_CHOICE="$(grep "${KEYMAP_CHOICE}" < "${DIRECTORY}/files/keymaps" | cut -c1-22 | x1s)" # filter the choice
+	sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"${KEYMAP_CHOICE}\"/"
 	status "Configuring keyboard-configuration..."
-	OUTPUT="$(sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration 2>&1)" || error "Failed to configure keyboard-configuration.\nOutput:\n${OUTPUT}"
+	sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration 2>&1 
 	status "Enabling keyboard-setup initscript..."
-	OUTPUT="$(sudo -E invoke-rc.d keyboard-setup start)" || error "Failed to enable keyboard-setup initscript.\nError:\n${OUTPUT}"
+	sudo -E invoke-rc.d keyboard-setup start
 	status "Setting up keyboard..."
-	sudo -E setsid sh -c 'exec setupcon -k --force <> /dev/tty1 >&0 2>&1' || error "Failed to set up the font and the keyboard on the console.\nOutput:\n${OUTPUT}"
-	sudo -E udevadm trigger --subsystem-match=input --action=change || error "Failed to trigger input change in udevadm.\nOutput:\n${OUTPUT}"
+	sudo -E setsid sh -c 'exec setupcon -k --force <> /dev/tty1 >&0 2>&1' 
+	sudo -E udevadm trigger --subsystem-match=input --action=change
 	success_bold "Done"
+}
+
+is_installed() {
+  if [ "$(dpkg -l "$1" 2> /dev/null | tail -n 1 | cut -d ' ' -f 1)" != "ii" ]; then
+    return 1
+  else
+    return 0
+  fi
 }
 
 get_device_info(){
@@ -226,22 +245,22 @@ get_device_info(){
 
 	command -v flatpak &>/dev/null \
 		&& if flatpak info 2>/dev/null | grep -q "Note that the directories"; then 
-			export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"
+			export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | x1s | sed 's/ /:/g')"
 		fi && [ "$(flatpak list)" != "" ] && FLATPAK_PACKAGES="$(flatpak list | grep -vc 'Application ID')"
 	
 	OS="$(grep PRETTY_NAME  < /etc/os-release | tr -d '"' | awk -F= '{print $2}')" 
 	OS_ARCH="$(dpkg --print-architecture)" 
 	KERNEL="$(uname -mrs)" 
-	MODEL="$(grep Model  < /proc/cpuinfo | xargs | sed 's/Model : //g')" 
+	MODEL="$(grep Model  < /proc/cpuinfo | x1s | sed 's/Model : //g')" 
 	RAM_SIZE="$(echo "scale=2 ; $( awk '/MemTotal/ {print $2}' /proc/meminfo ) / 1024000 " | bc ) GB"
 	IMAGE_VERSION="$(grep 'Raspberry Pi reference'  < /etc/rpi-issue | sed 's/Raspberry Pi reference //g')" 
 	INSTALLED_PACKAGES="dpkg (${DPKG_PACKAGES})$(is_not_empty "${SNAP_PACKAGES}" && echo ", snap (${SNAP_PACKAGES})")$(is_not_empty "${FLATPAK_PACKAGES}" && echo ", flatpak (${FLATPAK_PACKAGES})")"
 	UPTIME="$(uptime -p | sed "s/up //g" | sed s/,//g)" 
 	RESOLUTION="$(fbset -i  | grep "mode " | tr -d '"' | tr -d "mode ")" 
 	DESKTOP_ENVIRONMENT="$XDG_CURRENT_DESKTOP" 
-	WINDOW_MANAGER="$(xprop -id "$(xprop -root -notype _NET_SUPPORTING_WM_CHECK | sed 's/.*# //')" -notype -len 100 -f _NET_WM_NAME 8t | grep WM_NAME | sed 's/.*= //g' | xargs)" 
+	WINDOW_MANAGER="$(xprop -id "$(xprop -root -notype _NET_SUPPORTING_WM_CHECK | sed 's/.*# //')" -notype -len 100 -f _NET_WM_NAME 8t | grep WM_NAME | sed 's/.*= //g' | x1s)" 
 	OPENGL_VERSION="$(glxinfo -B | grep 'OpenGL ES profile version string' | sed 's/OpenGL ES profile version string: //g')"
-	GPU_MODEL="$(glxinfo -B | grep 'Device\|Vendor' | sed 's/.*Device: //g' | sed 's/.*Vendor: //g' | sed -e 's/([^()]*)//g' | xargs)"
+	GPU_MODEL="$(glxinfo -B | grep 'Device\|Vendor' | sed 's/.*Device: //g' | sed 's/.*Vendor: //g' | sed -e 's/([^()]*)//g' | x1s)"
 	HOSTNAME="$(hostname)"
 	LOCAL_IP="$(hostname -I | awk '{print $1}')"
 	PUBLIC_IP="$(wget -qO- ifconfig.me)"
@@ -249,7 +268,7 @@ get_device_info(){
 	SOC_VERSION="$(grep Hardware < /proc/cpuinfo | cut -c12-18)"
 	# shellcheck disable=SC2001
 	GPU_TEMPERATURE="$(sed s/temp=//g <<< "$(vcgencmd measure_temp)")"
-	CPU_MODEL="$(lscpu | grep "Model name\|Vendor ID" | sed 's/.*://g' | xargs)"
+	CPU_MODEL="$(lscpu | grep "Model name\|Vendor ID" | sed 's/.*://g' | x1s)"
 
 	echo -e "${GREEN}Operating System   ${NORMAL} : $(if is_empty "${OS}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS}"; fi)"
 	echo -e "${GREEN}OS Architecture    ${NORMAL} : $(if is_empty "${OS_ARCH}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS_ARCH}"; fi)"
@@ -273,49 +292,68 @@ get_device_info(){
 }
 
 testfunc() {
-	true
+	ech wowowo
 }
 
 
 error() {
 	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
   local LINE_INDICATES_ERROR="$1"
-  local ERROR_MESSAGE="$2"
-  local EXIT_CODE="${3:-1}" # if no exit code specified, fall back to 1
-  if [[ -n "${ERROR_MESSAGE}" ]] ; then
-    echo "    Near line ${LINE_INDICATES_ERROR}.
-    Error Message: ${ERROR_MESSAGE}
-    Exit code: ${EXIT_CODE}" 1>&2
-  else
-    echo "    Near line ${LINE_INDICATES_ERROR}.
-    Exit code: ${EXIT_CODE}" 1>&2
-  fi
+	shift
+	while [ "${1}" ]; do
+		if echo ${1} | grep -q ' '; then
+	 	 local ERROR_MESSAGE="${1}" # there is space in $1, assume error message
+		elif is_number "${1}"; then
+			local EXIT_CODE="${1}" # $1 is a number, assume exit code
+		else
+			local FUNCTION_NAME="${1}" # no space and not number in $1, assume function name
+		fi
+	shift
+	done
+  local EXIT_CODE="${EXIT_CODE:-1}" # if no exit code specified, fall back to 1
+
+	echo "    Near line ${LINE_INDICATES_ERROR}." 1>&2
+	is_not_empty "${FUNCTION_NAME}" && echo "    At Function: ${FUNCTION_NAME}" 1>&2
+	is_not_empty "${ERROR_MESSAGE}" && echo "    Error Message: ${ERROR_MESSAGE}" 1>&2
+	echo "    Exit code: ${EXIT_CODE}" 1>&2
+
   exit "${EXIT_CODE}"
 }
 
-trap 'error ${LINENO}' ERR
+trap 'echo ${FUNCNAME}; error ${LINENO} ${FUNCNAME}' ERR
+trap 'echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}CTRL-C detected. Exiting now.${NORMAL}" 1>&2; exit 1' INT
+
+
+if ! [ -t 1 ] || ! [ -t 2 ]; then
+	PIPED=1
+fi
+
 
 #text formatting variables
-RED="$(is_empty ${PIPED} && echo '\e[31m')"
-GREEN="$(is_empty ${PIPED} && echo '\e[32m')"
-YELLOW="$(is_empty ${PIPED} && echo '\e[33m')"
-BLUE="$(is_empty ${PIPED} && echo '\e[34m')"
-CYAN="$(is_empty ${PIPED} && echo '\e[36m')"
-LIGHT_RED="$(is_empty ${PIPED} && echo '\e[91m')"
-LIGHT_GREEN="$(is_empty ${PIPED} && echo '\e[92m')"
-LIGHT_YELLOW="$(is_empty ${PIPED} && echo '\e[93m')"
-LIGHT_BLUE="$(is_empty ${PIPED} && echo '\e[94m')"
-LIGHT_CYAN="$(is_empty ${PIPED} && echo '\e[96m')"
-WHITE="$(is_empty ${PIPED} && echo '\e[97m')"
-DARK_GREY="$(is_empty ${PIPED} && echo '\e[90m')"
-BOLD="$(is_empty ${PIPED} && echo '\e[1m')"
-UNDERLINE="$(is_empty ${PIPED} && echo '\e[4m')"
-INVERTED="$(is_empty ${PIPED} && echo '\e[7m')"
-NORMAL="$(is_empty ${PIPED} && echo '\e[0m')"
-DIM="$(is_empty ${PIPED} && echo '\e[2m')"
+text_format() {
+	RED="$(is_empty ${PIPED} && echo '\e[31m' || true)"
+	GREEN="$(is_empty ${PIPED} && echo '\e[32m' || true)"
+	YELLOW="$(is_empty ${PIPED} && echo '\e[33m' || true)"
+	BLUE="$(is_empty ${PIPED} && echo '\e[34m' || true)"
+	CYAN="$(is_empty ${PIPED} && echo '\e[36m' || true)"
+	LIGHT_RED="$(is_empty ${PIPED} && echo '\e[91m' || true)"
+	LIGHT_GREEN="$(is_empty ${PIPED} && echo '\e[92m' || true)"
+	LIGHT_YELLOW="$(is_empty ${PIPED} && echo '\e[93m' || true)"
+	LIGHT_BLUE="$(is_empty ${PIPED} && echo '\e[94m' || true)"
+	LIGHT_CYAN="$(is_empty ${PIPED} && echo '\e[96m' || true)"
+	WHITE="$(is_empty ${PIPED} && echo '\e[97m' || true)"
+	DARK_GREY="$(is_empty ${PIPED} && echo '\e[90m' || true)"
+	BOLD="$(is_empty ${PIPED} && echo '\e[1m' || true)"
+	UNDERLINE="$(is_empty ${PIPED} && echo '\e[4m' || true)"
+	INVERTED="$(is_empty ${PIPED} && echo '\e[7m' || true)"
+	NORMAL="$(is_empty ${PIPED} && echo '\e[0m' || true)"
+	DIM="$(is_empty ${PIPED} && echo '\e[2m' || true)"
+}
 
-get_device_info
+text_format
+testfunc || error "${LINENO}" "Failed to run testfunc"
 
+# set_keyboard
 # case $1 in
 # 	-h|--help)
 # 		show_help_ERROR_MESSAGE
@@ -347,4 +385,4 @@ get_device_info
 # 	*)
 # 		pi-tools_help_ERROR_MESSAGE
 # esac
-#echo "$(echo "apt ($(apt list --installed  | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"
+#echo "$(echo "apt ($(apt list --installed  | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | x1s | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"

@@ -3,37 +3,10 @@
 
 export DIRECTORY="$(dirname "$(readlink -f "$0")")"
 
-#text formatting variables
-RED="\e[31m"
-GREEN="\e[32m"
-YELLOW="\e[33m"
-BLUE="\e[34m"
-CYAN="\e[36m"
-LIGHT_RED="\e[91m"
-LIGHT_GREEN="\e[92m"
-LIGHT_YELLOW="\e[93m"
-LIGHT_BLUE="\e[94m"
-LIGHT_CYAN="\e[96m"
-WHITE="\e[97m"
-DARK_GREY="\e[90m"
-BOLD="\e[1m"
-UNDERLINE="\e[4m"
-INVERTED="\e[7m"
-NORMAL="\e[0m"
-DIM="\e[2m"
-
-error() {
-	LINE_NUMBER=$1
-	ERROR_CODE=$2
-
-	echo -e "\n\e[91m[!] An error occured in $(realpath "$(readlink -f "$0")"):\e[0m\n" 1>&2
-
-	echo -e "\e[93m[!] LINE: ${LINE_NUMBER} \e[0m" 1>&2
-	echo -e "\e[93m[!] ERROR CODE: ${ERROR_CODE}\e[0m" 1>&2 
-
-
-	echo -e "\n\e[91m[!] Exiting now.\e[0m\n" 1>&2
-}
+# check if this script is running through a pipe or being redirected
+if ! [ -t 1 ] || ! [ -t 2 ]; then 
+	PIPED="1"
+fi
 
 question() {
 	echo -e "${YELLOW}${BOLD}[?]${NORMAL} ${LIGHT_YELLOW}$1${NORMAL}" 
@@ -55,7 +28,7 @@ success_bold() {
 	echo -e "${GREEN}${BOLD}[✔]${NORMAL} ${LIGHT_GREEN}${BOLD}$1${NORMAL}"
 }
 
-pi-tools_help_message() {
+pi-tools_help_ERROR_MESSAGE() {
 	echo "╱╱╱╱╱╱╱╭╮╱╱╱╱╱╱╭╮
 ╱╱╱╱╱╱╭╯╰╮╱╱╱╱╱┃┃
 ╭━━┳╮╱╰╮╭╋━━┳━━┫┃╭━━╮
@@ -276,36 +249,76 @@ get_device_info(){
 	SOC_VERSION="$(grep Hardware < /proc/cpuinfo | cut -c12-18)"
 	# shellcheck disable=SC2001
 	GPU_TEMPERATURE="$(sed s/temp=//g <<< "$(vcgencmd measure_temp)")"
+	CPU_MODEL="$(lscpu | grep "Model name\|Vendor ID" | sed 's/.*://g' | xargs)"
 
-	echo -e "${GREEN}Operating system   ${NORMAL} : $(if [ "${OS}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS}"; fi)"
-	echo -e "${GREEN}OS Architecture    ${NORMAL} : $(if [ "${OS_ARCH}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS_ARCH}"; fi)"
-	echo -e "${GREEN}Kernel             ${NORMAL} : $(if [ "${KERNEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${KERNEL}"; fi)"
-	echo -e "${GREEN}Raspberry Pi Model ${NORMAL} : $(if [ "${MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${MODEL}"; fi)"
-	echo -e "${GREEN}RAM Size           ${NORMAL} : $(if [ "${RAM_SIZE}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RAM_SIZE}"; fi)"
-	echo -e "${GREEN}Image Version      ${NORMAL} : $(if [ "${IMAGE_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${IMAGE_VERSION}"; fi)"
-	echo -e "${GREEN}Installed Packages ${NORMAL} : $(if [ "${INSTALLED_PACKAGES}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${INSTALLED_PACKAGES}"; fi)"
-	echo -e "${GREEN}Uptime             ${NORMAL} : $(if [ "${UPTIME}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${UPTIME}"; fi)"
-	echo -e "${GREEN}Resolution         ${NORMAL} : $(if [ "${RESOLUTION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
-	echo -e "${GREEN}Desktop Environment${NORMAL} : $(if [ "${DESKTOP_ENVIRONMENT}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${DESKTOP_ENVIRONMENT}"; fi)"
-	echo -e "${GREEN}Window Manager     ${NORMAL} : $(if [ "${WINDOW_MANAGER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${WINDOW_MANAGER}"; fi)"
-	echo -e "${GREEN}OpenGL Version     ${NORMAL} : $(if [ "${OPENGL_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OPENGL_VERSION}"; fi)"
-	echo -e "${GREEN}GPU Model          ${NORMAL} : $(if [ "${GPU_MODEL}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${GPU_MODEL}"; fi)"
-	echo -e "${GREEN}Local IP Address   ${NORMAL} : $(if [ "${LOCAL_IP}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${LOCAL_IP}"; fi)"
-	echo -e "${GREEN}Public IP Address  ${NORMAL} : $(if [ "${PUBLIC_IP}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${PUBLIC_IP}"; fi)"
-	echo -e "${GREEN}Current User       ${NORMAL} : $(if [ "${CURRENT_USER}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CURRENT_USER}"; fi)"
-	echo -e "${GREEN}SoC Version        ${NORMAL} : $(if [ "${SOC_VERSION}" == "" ]; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${SOC_VERSION}"; fi)"	
+	echo -e "${GREEN}Operating System   ${NORMAL} : $(if is_empty "${OS}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS}"; fi)"
+	echo -e "${GREEN}OS Architecture    ${NORMAL} : $(if is_empty "${OS_ARCH}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OS_ARCH}"; fi)"
+	echo -e "${GREEN}Kernel             ${NORMAL} : $(if is_empty "${KERNEL}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${KERNEL}"; fi)"
+	echo -e "${GREEN}Raspberry Pi Model ${NORMAL} : $(if is_empty "${MODEL}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${MODEL}"; fi)"
+	echo -e "${GREEN}RAM Size           ${NORMAL} : $(if is_empty "${RAM_SIZE}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RAM_SIZE}"; fi)"
+	echo -e "${GREEN}Image Version      ${NORMAL} : $(if is_empty "${IMAGE_VERSION}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${IMAGE_VERSION}"; fi)"
+	echo -e "${GREEN}Installed Packages ${NORMAL} : $(if is_empty "${INSTALLED_PACKAGES}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${INSTALLED_PACKAGES}"; fi)"
+	echo -e "${GREEN}Uptime             ${NORMAL} : $(if is_empty "${UPTIME}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${UPTIME}"; fi)"
+	echo -e "${GREEN}Resolution         ${NORMAL} : $(if is_empty "${RESOLUTION}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${RESOLUTION}"; fi)"
+	echo -e "${GREEN}Desktop Environment${NORMAL} : $(if is_empty "${DESKTOP_ENVIRONMENT}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${DESKTOP_ENVIRONMENT}"; fi)"
+	echo -e "${GREEN}Window Manager     ${NORMAL} : $(if is_empty "${WINDOW_MANAGER}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${WINDOW_MANAGER}"; fi)"
+	echo -e "${GREEN}OpenGL Version     ${NORMAL} : $(if is_empty "${OPENGL_VERSION}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${OPENGL_VERSION}"; fi)"
+	echo -e "${GREEN}GPU Model          ${NORMAL} : $(if is_empty "${GPU_MODEL}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${GPU_MODEL}"; fi)"
+	echo -e "${GREEN}Local IP Address   ${NORMAL} : $(if is_empty "${LOCAL_IP}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${LOCAL_IP}"; fi)"
+	echo -e "${GREEN}Public IP Address  ${NORMAL} : $(if is_empty "${PUBLIC_IP}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${PUBLIC_IP}"; fi)"
+	echo -e "${GREEN}Current User       ${NORMAL} : $(if is_empty "${CURRENT_USER}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CURRENT_USER}"; fi)"
+	echo -e "${GREEN}SoC Version        ${NORMAL} : $(if is_empty "${SOC_VERSION}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${SOC_VERSION}"; fi)"	
+	echo -e "${GREEN}GPU Temperature    ${NORMAL} : $(if is_empty "${GPU_TEMPERATURE}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${GPU_TEMPERATURE}"; fi)"	
+	echo -e "${GREEN}CPU Model          ${NORMAL} : $(if is_empty "${CPU_MODEL}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CPU_MODEL}"; fi)"	
 }
-
-trap 'error $LINENO $?' ERR
 
 testfunc() {
-	lalalal
+	true
 }
 
-testfunc
+
+error() {
+	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
+  local LINE_INDICATES_ERROR="$1"
+  local ERROR_MESSAGE="$2"
+  local EXIT_CODE="${3:-1}" # if no exit code specified, fall back to 1
+  if [[ -n "${ERROR_MESSAGE}" ]] ; then
+    echo "    Near line ${LINE_INDICATES_ERROR}.
+    Error Message: ${ERROR_MESSAGE}
+    Exit code: ${EXIT_CODE}" 1>&2
+  else
+    echo "    Near line ${LINE_INDICATES_ERROR}.
+    Exit code: ${EXIT_CODE}" 1>&2
+  fi
+  exit "${EXIT_CODE}"
+}
+
+trap 'error ${LINENO}' ERR
+
+#text formatting variables
+RED="$(is_empty ${PIPED} && echo '\e[31m')"
+GREEN="$(is_empty ${PIPED} && echo '\e[32m')"
+YELLOW="$(is_empty ${PIPED} && echo '\e[33m')"
+BLUE="$(is_empty ${PIPED} && echo '\e[34m')"
+CYAN="$(is_empty ${PIPED} && echo '\e[36m')"
+LIGHT_RED="$(is_empty ${PIPED} && echo '\e[91m')"
+LIGHT_GREEN="$(is_empty ${PIPED} && echo '\e[92m')"
+LIGHT_YELLOW="$(is_empty ${PIPED} && echo '\e[93m')"
+LIGHT_BLUE="$(is_empty ${PIPED} && echo '\e[94m')"
+LIGHT_CYAN="$(is_empty ${PIPED} && echo '\e[96m')"
+WHITE="$(is_empty ${PIPED} && echo '\e[97m')"
+DARK_GREY="$(is_empty ${PIPED} && echo '\e[90m')"
+BOLD="$(is_empty ${PIPED} && echo '\e[1m')"
+UNDERLINE="$(is_empty ${PIPED} && echo '\e[4m')"
+INVERTED="$(is_empty ${PIPED} && echo '\e[7m')"
+NORMAL="$(is_empty ${PIPED} && echo '\e[0m')"
+DIM="$(is_empty ${PIPED} && echo '\e[2m')"
+
+get_device_info
+
 # case $1 in
 # 	-h|--help)
-# 		show_help_message
+# 		show_help_ERROR_MESSAGE
 # 	;;
 # 	di|device-info)
 # 		shift
@@ -332,6 +345,6 @@ testfunc
 # 		"${DIRECTORY}/scripts/wifi" "$@" || exit 1
 # 	;;
 # 	*)
-# 		pi-tools_help_message
+# 		pi-tools_help_ERROR_MESSAGE
 # esac
 #echo "$(echo "apt ($(apt list --installed  | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"

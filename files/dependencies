@@ -8,3 +8,4 @@ mesa-utils
 libraspberrypi-bin
 rfkill
 bluez
+cpufrequtils

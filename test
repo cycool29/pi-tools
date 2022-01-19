@@ -1,0 +1,19 @@
+Operating System    : Raspbian GNU/Linux 11 (bullseye)
+OS Architecture     : armhf
+Kernel              : Linux 5.10.63-v7l+ armv7l
+Raspberry Pi Model  : Raspberry Pi 4 Model B Rev 1.4
+RAM Size            : 7.89 GB
+Image Version       : 2021-10-30
+Installed Packages  : dpkg (2127), snap (1), flatpak (4)
+Uptime              : 5 hours 54 minutes
+Resolution          : 1920x1080
+Desktop Environment : LXDE
+Window Manager      : Mutter
+OpenGL Version      : OpenGL ES 3.1 Mesa 20.3.5
+GPU Model           : Broadcom V3D 4.2
+Local IP Address    : 192.168.100.13
+Public IP Address   : 202.190.5.246
+Current User        : pi
+SoC Version         : BCM2711
+GPU Temperature     : 54.5'C
+CPU Model           : ARM Cortex-A72

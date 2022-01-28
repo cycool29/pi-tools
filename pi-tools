@@ -301,7 +301,7 @@ error() {
   local LINE_INDICATES_ERROR="$1"
 	shift
 	while [ "${1}" ]; do
-		if echo ${1} | grep -q ' '; then
+		if echo "${1}"| grep -q ' '; then
 	 	 local ERROR_MESSAGE="${1}" # there is space in $1, assume error message
 		elif is_number "${1}"; then
 			local EXIT_CODE="${1}" # $1 is a number, assume exit code
@@ -331,23 +331,23 @@ fi
 
 #text formatting variables
 text_format() {
-	RED="$(is_empty ${PIPED} && echo '\e[31m' || true)"
-	GREEN="$(is_empty ${PIPED} && echo '\e[32m' || true)"
-	YELLOW="$(is_empty ${PIPED} && echo '\e[33m' || true)"
-	BLUE="$(is_empty ${PIPED} && echo '\e[34m' || true)"
-	CYAN="$(is_empty ${PIPED} && echo '\e[36m' || true)"
-	LIGHT_RED="$(is_empty ${PIPED} && echo '\e[91m' || true)"
-	LIGHT_GREEN="$(is_empty ${PIPED} && echo '\e[92m' || true)"
-	LIGHT_YELLOW="$(is_empty ${PIPED} && echo '\e[93m' || true)"
-	LIGHT_BLUE="$(is_empty ${PIPED} && echo '\e[94m' || true)"
-	LIGHT_CYAN="$(is_empty ${PIPED} && echo '\e[96m' || true)"
-	WHITE="$(is_empty ${PIPED} && echo '\e[97m' || true)"
-	DARK_GREY="$(is_empty ${PIPED} && echo '\e[90m' || true)"
-	BOLD="$(is_empty ${PIPED} && echo '\e[1m' || true)"
-	UNDERLINE="$(is_empty ${PIPED} && echo '\e[4m' || true)"
-	INVERTED="$(is_empty ${PIPED} && echo '\e[7m' || true)"
-	NORMAL="$(is_empty ${PIPED} && echo '\e[0m' || true)"
-	DIM="$(is_empty ${PIPED} && echo '\e[2m' || true)"
+	RED="$(if is_empty ${PIPED}; then echo '\e[31m'; else true; fi)"
+	GREEN="$(if is_empty ${PIPED}; then echo '\e[32m'; else true; fi)"
+	YELLOW="$(if is_empty ${PIPED}; then echo '\e[33m'; else true; fi)"
+	BLUE="$(if is_empty ${PIPED}; then echo '\e[34m'; else true; fi)"
+	CYAN="$(if is_empty ${PIPED}; then echo '\e[36m'; else true; fi)"
+	LIGHT_RED="$(if is_empty ${PIPED}; then echo '\e[91m'; else true; fi)"
+	LIGHT_GREEN="$(if is_empty ${PIPED}; then echo '\e[92m'; else true; fi)"
+	LIGHT_YELLOW="$(if is_empty ${PIPED}; then echo '\e[93m'; else true; fi)"
+	LIGHT_BLUE="$(if is_empty ${PIPED}; then echo '\e[94m'; else true; fi)"
+	LIGHT_CYAN="$(if is_empty ${PIPED}; then echo '\e[96m'; else true; fi)"
+	WHITE="$(if is_empty ${PIPED}; then echo '\e[97m'; else true; fi)"
+	DARK_GREY="$(if is_empty ${PIPED}; then echo '\e[90m'; else true; fi)"
+	BOLD="$(if is_empty ${PIPED}; then echo '\e[1m'; else true; fi)"
+	UNDERLINE="$(if is_empty ${PIPED}; then echo '\e[4m'; else true; fi)"
+	INVERTED="$(if is_empty ${PIPED}; then echo '\e[7m'; else true; fi)"
+	NORMAL="$(if is_empty ${PIPED}; then echo '\e[0m'; else true; fi)"
+	DIM="$(if is_empty ${PIPED}; then echo '\e[2m'; else true; fi)"
 }
 
 text_format

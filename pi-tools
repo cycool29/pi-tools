@@ -290,20 +290,37 @@ get_device_info() {
 	echo -e "${GREEN}CPU Model          ${NORMAL} : $(if is_empty "${CPU_MODEL}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CPU_MODEL}"; fi)"
 }
 
-toggle_vnc(){
+toggle_vnc() {
 	sudo_password
 	case "${1}" in 
 	on)
 		if is_installed realvnc-vnc-server || sudo apt-get install -y realvnc-vnc-server; then
-			systemctl enable vncserver-x11-serviced.service &&
-			systemctl start vncserver-x11-serviced.service
+			sudo systemctl enable vncserver-x11-serviced.service &&
+			sudo systemctl start vncserver-x11-serviced.service
 		fi
 	;;
 	off)
 		if is_installed realvnc-vnc-server; then
-			systemctl disable vncserver-x11-serviced.service
-			systemctl stop vncserver-x11-serviced.service
+			sudo systemctl disable vncserver-x11-serviced.service
+			sudo systemctl stop vncserver-x11-serviced.service
     	fi
+	;;
+	esac
+}
+
+toggle_ssh() {
+	if [ -e /var/log/regen_ssh_keys.log ] && ! grep -q "^finished" /var/log/regen_ssh_keys.log; then
+		error "$LINENO" "Initial ssh key generation still running. Please wait and try again." 
+	fi
+	case "${1}" in 
+	on)
+		ssh-keygen -A &&
+		sudo update-rc.d ssh enable &&
+		sudo invoke-rc.d ssh start
+	;;
+	off)
+		sudo update-rc.d ssh disable &&
+		sudo invoke-rc.d ssh stop
 	;;
 	esac
 }

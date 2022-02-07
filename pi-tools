@@ -96,10 +96,93 @@ is_dir() {
 	[[ -d "${TARGET}" ]]
 }
 
-is_number() {
-	local TARGET="${1}"
+is_not_number() {
+	if is_number $1; then
+		return 1
+	else
+		return 0
+	fi
+}
 
-	[[ "${TARGET}" =~ ^[0-9]+$ ]]
+is_number() {
+  case $1 in
+    ''|*[!0-9]*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+is_ssh() {
+  if pstree -p | grep -E --quiet --extended-regexp ".*sshd.*\($$\)"; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+is_arm () {
+  ARCH=$(dpkg --print-architecture)
+  if [ "$ARCH" = "armhf" ] || [ "$ARCH" = "arm64" ] ; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+is_live() {
+  grep -q "boot=live" /boot/cmdline.txt
+  return $?
+}
+
+is_fkms() {
+  if grep -s -q okay /proc/device-tree/soc/v3d@7ec00000/status \
+                     /proc/device-tree/soc/firmwarekms@7e600000/status \
+                     /proc/device-tree/v3dbus/v3d@7ec04000/status; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+set_config_var() {
+	sudo_password
+	PROPERTY="$1"
+	VALUE="$2"
+	grep -v "^${PROPERTY}" /boot/config.txt | sudo tee /boot/config.txt
+}
+
+clear_config_var() {
+  lua - "$1" "$2" <<EOF > "$2.bak"
+local key=assert(arg[1])
+local fn=assert(arg[2])
+local file=assert(io.open(fn))
+for line in file:lines() do
+  if line:match("^%s*"..key.."=.*$") then
+    line="#"..line
+  end
+  print(line)
+end
+EOF
+mv "$2.bak" "$2"
+}
+
+get_config_var() {
+  lua - "$1" "$2" <<EOF
+local key=assert(arg[1])
+local fn=assert(arg[2])
+local file=assert(io.open(fn))
+local found=false
+for line in file:lines() do
+  local val = line:match("^%s*"..key.."=(.*)$")
+  if (val ~= nil) then
+    print(val)
+    found=true
+    break
+  end
+end
+if not found then
+   print(0)
+end
+EOF
 }
 
 sudo_password() {
@@ -228,15 +311,12 @@ update_apps() {
 		echo "$OUTPUT" | grep 'can be upgraded' --color=None | sed "s/Run 'apt list --upgradable' to see it.//g"
 	else
 		error "pi-tools failed to parse APT output:\n$OUTPUT"
-
 	fi
-	success_bold "Done"
 }
 
 set_keyboard() {
-	info_bold "Configuring keyboard"
 	sudo_password
-	info "Please select the keymap of the keyboard."
+	question "Please select the keymap of the keyboard."
 	KEYMAP_CHOICE="$(cut -c23- <"${DIRECTORY}/files/keymaps" | fzf --height 20 --cycle)"          # user choice
 	KEYMAP_CHOICE="$(grep "${KEYMAP_CHOICE}" <"${DIRECTORY}/files/keymaps" | cut -c1-22 | xargs)" # filter the choice
 	sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"${KEYMAP_CHOICE}\"/"
@@ -247,7 +327,6 @@ set_keyboard() {
 	info "Setting up keyboard..."
 	sudo -E setsid sh -c 'exec setupcon -k --force <> /dev/tty1 >&0 2>&1'
 	sudo -E udevadm trigger --subsystem-match=input --action=change
-	success_bold "Done"
 }
 
 is_installed() {
@@ -326,6 +405,76 @@ toggle_overscan() {
 		echo "disable_overscan=1" | sudo tee -a /boot/config.txt 
 	;;
 	esac
+}
+
+toggle_screen_blanking() {
+	sudo_password
+	case "${1}" in
+	on)
+		sudo rm -f /etc/X11/xorg.conf.d/10-blanking.conf
+		sudo sed -i '/^\o033/d' /etc/issue
+	;;
+	off)
+	    mkdir -p /etc/X11/xorg.conf.d/
+    	sudo cp -a /usr/share/raspi-config/10-blanking.conf /etc/X11/xorg.conf.d/
+    	echo "\\033[9;0]" | sudo tee -a /etc/issue >/dev/null
+	;;
+	esac
+}
+
+toggle_pixel_doubling() {
+	case "${1}" in
+	on) 
+	if is_arm && ! is_fkms; then
+		SCREEN_X_VALUE=$(xrandr 2>&1 | grep current | cut -f2 -d, | cut -f3 -d' ')
+		SCREEN_Y_VALUE=$(xrandr 2>&1 | grep current | cut -f2 -d, | cut -f5 -d' ')
+		if is_not_number "${SCREEN_X_VALUE}" || is_not_number "${SCREEN_Y_VALUE}"; then
+			error "Could not read current screen dimensions"
+		fi
+		NEW_SCREEN_X_VALUE=`expr $SCREEN_X_VALUE / 2`
+		NEW_SCREEN_Y_VALUE=`expr $SCREEN_Y_VALUE / 2`
+		set_config_var framebuffer_width "$NEW_SCREEN_X_VALUE" 
+		set_config_var framebuffer_height $NEW_SCREEN_Y_VALUE 
+		set_config_var scaling_kernel 8 
+	fi
+	elif [ $RET -eq 1 ]; then
+		clear_config_var framebuffer_width 
+		clear_config_var framebuffer_height 
+		clear_config_var scaling_kernel 
+		STATUS=disabled
+	else
+		return $RET
+	fi
+	else
+	if [ $RET -eq 0 ] ; then
+		if [ -e /usr/share/dispsetup.sh ] ; then
+		rm /usr/share/dispsetup.sh
+		fi
+		echo '#!/bin/sh' > /usr/share/dispsetup.sh
+		DEV=$(xrandr | grep -w connected | cut -f1 -d' ')
+		for item in $DEV
+		do
+		echo xrandr --output $item --scale 0.5x0.5 --filter nearest >> /usr/share/dispsetup.sh
+		done
+		STATUS=enabled
+	elif [ $RET -eq 1 ]; then
+		if [ -e /usr/share/dispsetup.sh ] ; then
+		rm /usr/share/dispsetup.sh
+		fi
+		echo '#!/bin/sh' > /usr/share/dispsetup.sh
+		echo 'exit 0' >> /usr/share/dispsetup.sh
+		STATUS=disabled
+	else
+		return $RET
+	fi
+	chmod a+x /usr/share/dispsetup.sh
+	fi
+	if [ $RET -eq $CURRENT ]; then
+	ASK_TO_REBOOT=1
+	fi
+	if [ "$INTERACTIVE" = True ]; then
+	whiptail --msgbox "Pixel doubling is $STATUS" 20 60 1
+	fi
 }
 
 toggle_vnc() {

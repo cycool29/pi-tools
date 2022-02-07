@@ -3,6 +3,7 @@
 
 # trap functions
 set -o pipefail
+set -x
 
 export DIRECTORY="$(dirname "$(readlink -f "$0")")"
 
@@ -11,27 +12,55 @@ if ! [ -t 1 ] || ! [ -t 2 ]; then
 	NOT_TERMINAL="1"
 fi
 
+# info, debug, dump, error , question
+
+error() {
+	while is_not_empty "${1}"; do
+		case "${1}" in
+			--no-exit) # do not exit after prining error messages
+				local NO_EXIT=1
+				shift
+				;;
+			--user-err) # user error, not asking user to open an issue on github
+				local USER_ERROR=1
+				shift
+				;;
+			--dev-err) # devs error, ask users to open an issue on github 
+				local DEV_ERROR=1
+				shift
+				;;
+			*)
+				local ERROR_MESSAGES="${1}" 
+				shift
+				;;
+		esac
+		shift
+	done
+	if is_not_empty "${USER_ERROR}"; then
+		echo -e "${RED}${BOLD}[!] User error:${NORMAL} ${RED}${ERROR_MESSAGES}${NORMAL}"
+	elif is_not_empty "${DEV_ERROR}"; then
+		echo -e "${RED}${BOLD}[!]Developer error:${NORMAL} ${RED}${ERROR_MESSAGES}${NORMAL}"
+	fi
+	is_empty "${NO_EXIT}" && exit "${EXIT_CODE}" 
+}
+
+info() {
+	[ "${ENABLE_INFO}" ] && echo "${@}"
+}
+
+debug() {
+	[ "${ENABLE_DEBUG}" ] && echo "${@}"
+}
+
+dump() {
+	[ "${ENABLE_DUMP}" ] && echo "${@}"
+}
+
 question() {
-	echo -e "${YELLOW}${BOLD}[?]${NORMAL} ${LIGHT_YELLOW}$1${NORMAL}"
+	echo -e "${YELLOW}${BOLD}[?]${NORMAL} ${LIGHT_YELLOW}${*}${NORMAL}"
 }
 
-status() {
-	echo -e "${CYAN}${BOLD}[-]${NORMAL} ${LIGHT_CYAN}$1${NORMAL}"
-}
-
-status_bold() {
-	echo -e "${CYAN}${BOLD}[-]${NORMAL} ${LIGHT_CYAN}${BOLD}$1${NORMAL}"
-}
-
-success() {
-	echo -e "${GREEN}${BOLD}[✔]${NORMAL} ${LIGHT_GREEN}$1${NORMAL}"
-}
-
-success_bold() {
-	echo -e "${GREEN}${BOLD}[✔]${NORMAL} ${LIGHT_GREEN}${BOLD}$1${NORMAL}"
-}
-
-pi-tools_help_ERROR_MESSAGE() {
+pi-tools_help() {
 	echo "╱╱╱╱╱╱╱╭╮╱╱╱╱╱╱╭╮
 ╱╱╱╱╱╱╭╯╰╮╱╱╱╱╱┃┃
 ╭━━┳╮╱╰╮╭╋━━┳━━┫┃╭━━╮
@@ -87,17 +116,16 @@ sudo_password() {
 
 get_pi_version() {
 	if grep -q "^Revision\s*:\s*00[0-9a-fA-F][0-9a-fA-F]$" /proc/cpuinfo || grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]0[0-36][0-9a-fA-F]$" /proc/cpuinfo; then
-		PI_VERSION=1
+		echo "1"
 	elif grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]04[0-9a-fA-F]$" /proc/cpuinfo; then
-		PI_VERSION=2
+		echo "2"
 	elif grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]0[9cC][0-9a-fA-F]$" /proc/cpuinfo; then
-		PI_VERSION=3
+		echo "3"
 	elif grep -q "^Revision\s*:\s*[ 123][0-9a-fA-F][0-9a-fA-F]3[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$" /proc/cpuinfo; then
-		PI_VERSION=4
+		echo "4"
 	else
-		error "Raspberry Pi version not detected.\nIf you are using a Raspberry Pi 1, 2, 3 or 4, PLEASE report to https://github.com/cycool29/pi-tools/issue."
+		error "Raspberry Pi version not detected.\nIf you are using a Raspberry Pi 1, 2, 3 or 4, PLEASE open an issue https://github.com/cycool29/pi-tools/issue."
 	fi
-	[ "${NOT_SOURCED}" == 1 ] && echo "${PI_VERSION}"
 }
 
 get_codename() {
@@ -143,7 +171,7 @@ detect_device_type() {
 turn_bluetooth() {
 	case ${1} in
 	on)
-		status "Turning on Bluetooth..."
+		info "Turning on Bluetooth..."
 		sudo_password || exit 1
 		sudo rfkill unblock bluetooth || error "Failed to turn on Bluetooth."
 		sudo service bluetooth restart
@@ -290,6 +318,20 @@ get_device_info() {
 	echo -e "${GREEN}CPU Model          ${NORMAL} : $(if is_empty "${CPU_MODEL}"; then echo -e "${DARK_GREY}Not available${NORMAL}"; else echo "${CPU_MODEL}"; fi)"
 }
 
+toggle_overscan() {
+	sudo_password
+	case "${1}" in
+	on)
+		sudo sed -i 's/disable_overscan=//g' /boot/config.txt
+		echo "disable_overscan=0" | sudo tee -a /boot/config.txt 
+	;;
+	off)
+		sudo sed -i 's/disable_overscan=//g' /boot/config.txt
+		echo "disable_overscan=1" | sudo tee -a /boot/config.txt 
+	;;
+	esac
+}
+
 toggle_vnc() {
 	sudo_password
 	case "${1}" in 
@@ -325,32 +367,32 @@ toggle_ssh() {
 	esac
 }
 
-error() {
-	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
-	local LINE_INDICATES_ERROR="$1"
-	shift
-	while [ "${1}" ]; do
-		if echo "${1}" | grep -q ' '; then
-			local ERROR_MESSAGE="${1}" # there is space in $1, assume error message
-		elif is_number "${1}"; then
-			local EXIT_CODE="${1}" # $1 is a number, assume exit code
-		else
-			local FUNCTION_NAME="${1}" # no space and not number in $1, assume function name
-		fi
-		shift
-	done
-	local EXIT_CODE="${EXIT_CODE:-1}" # if no exit code specified, fall back to 1
+# error() {
+# 	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
+# 	local LINE_INDICATES_ERROR="$1"
+# 	shift
+# 	while [ "${1}" ]; do
+# 		if echo "${1}" | grep -q ' '; then
+# 			local ERROR_MESSAGE="${1}" # there is space in $1, assume error message
+# 		elif is_number "${1}"; then
+# 			local EXIT_CODE="${1}" # $1 is a number, assume exit code
+# 		else
+# 			local FUNCTION_NAME="${1}" # no space and not number in $1, assume function name
+# 		fi
+# 		shift
+# 	done
+# 	local EXIT_CODE="${EXIT_CODE:-1}" # if no exit code specified, fall back to 1
 
-	echo "    Near line ${LINE_INDICATES_ERROR}." 1>&2
-	is_not_empty "${FUNCTION_NAME}" && echo "    At Function: ${FUNCTION_NAME}" 1>&2
-	is_not_empty "${ERROR_MESSAGE}" && echo "    Error Message: ${ERROR_MESSAGE}" 1>&2
-	echo "    Exit code: ${EXIT_CODE}" 1>&2
-	trap '' ERR
+# 	echo "    Near line ${LINE_INDICATES_ERROR}." 1>&2
+# 	is_not_empty "${FUNCTION_NAME}" && echo "    At Function: ${FUNCTION_NAME}" 1>&2
+# 	is_not_empty "${ERROR_MESSAGE}" && echo "    Error Message: ${ERROR_MESSAGE}" 1>&2
+# 	echo "    Exit code: ${EXIT_CODE}" 1>&2
+# 	trap '' ERR
 
-	exit "${EXIT_CODE}"
-}
+# 	exit "${EXIT_CODE}"; kill $$
+# }
 
-trap 'error ${LINENO} ${FUNCNAME}' ERR
+# trap 'error ${LINENO} ${FUNCNAME}' ERR
 trap 'echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}CTRL-C detected. Exiting now.${NORMAL}" 1>&2; exit 1' INT
 
 # check if piped or redirected
@@ -380,7 +422,7 @@ text_format() {
 }
 
 text_format
-# testfunc || error "${LINENO}" "Failed to run testfunc"
+testfunc || error "Failed to run testfunc." 2
 "$@"
 
 # wow || error "failed"

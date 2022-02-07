@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2155,SC2094,SC2034,SC2059
 
-# trap functions
-set -o pipefail
-set -x
-
 export DIRECTORY="$(dirname "$(readlink -f "$0")")"
 
 # check if this script is running through a pipe or being redirected
@@ -108,7 +104,7 @@ is_number() {
 
 sudo_password() {
 	if ! sudo -n ls &>/dev/null; then
-		status "This operation needs root access."
+		info "This operation needs root access."
 		sudo -S true || error "Authentication Failed."
 		success "Root authentication success."
 	fi
@@ -178,12 +174,12 @@ turn_bluetooth() {
 		bluetoothctl power on
 		;;
 	off)
-		status "Turning off Bluetooth..."
+		info "Turning off Bluetooth..."
 		sudo_password || exit 1
 		sudo rfkill block bluetooth || error "Failed to turn off Bluetooth."
 		;;
 	restart)
-		status "Restarting Bluetooth"
+		info "Restarting Bluetooth"
 		sudo_password || exit 1
 		sudo rfkill block bluetooth || error "Failed to turn off Bluetooth."
 		sudo rfkill unblock bluetooth || error "Failed to turn on Bluetooth."
@@ -223,8 +219,8 @@ find_partition_start_offset() {
 
 update_apps() {
 	sudo_password
-	status_bold "Updating APT"
-	status "Updating APT package list..."
+	info_bold "Updating APT"
+	info "Updating APT package list..."
 	OUTPUT="$(sudo apt update --allow-releaseinfo-change 2>&1)" || error "Failed to update APT package list.:\n${OUTPUT}"
 	if echo "$OUTPUT" | grep -q "All packages are up to date"; then
 		success "All APT packages are up to date."
@@ -238,17 +234,17 @@ update_apps() {
 }
 
 set_keyboard() {
-	status_bold "Configuring keyboard"
+	info_bold "Configuring keyboard"
 	sudo_password
-	status "Please select the keymap of the keyboard."
+	info "Please select the keymap of the keyboard."
 	KEYMAP_CHOICE="$(cut -c23- <"${DIRECTORY}/files/keymaps" | fzf --height 20 --cycle)"          # user choice
 	KEYMAP_CHOICE="$(grep "${KEYMAP_CHOICE}" <"${DIRECTORY}/files/keymaps" | cut -c1-22 | xargs)" # filter the choice
 	sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"${KEYMAP_CHOICE}\"/"
-	status "Configuring keyboard-configuration..."
+	info "Configuring keyboard-configuration..."
 	sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration 2>&1
-	status "Enabling keyboard-setup initscript..."
+	info "Enabling keyboard-setup initscript..."
 	sudo -E invoke-rc.d keyboard-setup start
-	status "Setting up keyboard..."
+	info "Setting up keyboard..."
 	sudo -E setsid sh -c 'exec setupcon -k --force <> /dev/tty1 >&0 2>&1'
 	sudo -E udevadm trigger --subsystem-match=input --action=change
 	success_bold "Done"

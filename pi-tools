@@ -13,22 +13,22 @@ fi
 error() {
 	while is_not_empty "${1}"; do
 		case "${1}" in
-			--no-exit) # do not exit after prining error messages
-				local NO_EXIT=1
-				shift
-				;;
-			--user-err) # user error, not asking user to open an issue on github
-				local USER_ERROR=1
-				shift
-				;;
-			--dev-err) # devs error, ask users to open an issue on github 
-				local DEV_ERROR=1
-				shift
-				;;
-			*)
-				local ERROR_MESSAGES="${1}" 
-				shift
-				;;
+		--no-exit) # do not exit after prining error messages
+			local NO_EXIT=1
+			shift
+			;;
+		--user-err) # user error, not asking user to open an issue on github
+			local USER_ERROR=1
+			shift
+			;;
+		--dev-err) # devs error, ask users to open an issue on github
+			local DEV_ERROR=1
+			shift
+			;;
+		*)
+			local ERROR_MESSAGES="${1}"
+			shift
+			;;
 		esac
 		shift
 	done
@@ -37,7 +37,7 @@ error() {
 	elif is_not_empty "${DEV_ERROR}"; then
 		echo -e "${RED}${BOLD}[!]Developer error:${NORMAL} ${RED}${ERROR_MESSAGES}${NORMAL}"
 	fi
-	is_empty "${NO_EXIT}" && exit "${EXIT_CODE}" 
+	is_empty "${NO_EXIT}" && exit "${EXIT_CODE}"
 }
 
 info() {
@@ -105,42 +105,42 @@ is_not_number() {
 }
 
 is_number() {
-  case $1 in
-    ''|*[!0-9]*) return 0 ;;
-    *) return 1 ;;
-  esac
+	case $1 in
+	'' | *[!0-9]*) return 0 ;;
+	*) return 1 ;;
+	esac
 }
 
 is_ssh() {
-  if pstree -p | grep -E --quiet --extended-regexp ".*sshd.*\($$\)"; then
-    return 0
-  else
-    return 1
-  fi
+	if pstree -p | grep -E --quiet --extended-regexp ".*sshd.*\($$\)"; then
+		return 0
+	else
+		return 1
+	fi
 }
 
-is_arm () {
-  ARCH=$(dpkg --print-architecture)
-  if [ "$ARCH" = "armhf" ] || [ "$ARCH" = "arm64" ] ; then
-    return 0
-  else
-    return 1
-  fi
+is_arm() {
+	ARCH=$(dpkg --print-architecture)
+	if [ "$ARCH" = "armhf" ] || [ "$ARCH" = "arm64" ]; then
+		return 0
+	else
+		return 1
+	fi
 }
 
 is_live() {
-  grep -q "boot=live" /boot/cmdline.txt
-  return $?
+	grep -q "boot=live" /boot/cmdline.txt
+	return $?
 }
 
 is_fkms() {
-  if grep -s -q okay /proc/device-tree/soc/v3d@7ec00000/status \
-                     /proc/device-tree/soc/firmwarekms@7e600000/status \
-                     /proc/device-tree/v3dbus/v3d@7ec04000/status; then
-    return 0
-  else
-    return 1
-  fi
+	if grep -s -q okay /proc/device-tree/soc/v3d@7ec00000/status \
+		/proc/device-tree/soc/firmwarekms@7e600000/status \
+		/proc/device-tree/v3dbus/v3d@7ec04000/status; then
+		return 0
+	else
+		return 1
+	fi
 }
 
 set_config_var() {
@@ -347,7 +347,7 @@ get_device_info() {
 	WINDOW_MANAGER="$(xprop -id "$(xprop -root -notype _NET_SUPPORTING_WM_CHECK | sed 's/.*# //')" -notype -len 100 -f _NET_WM_NAME 8t | grep WM_NAME | sed 's/.*= //g' | xargs)"
 	OPENGL_VERSION="$(glxinfo -B | grep 'OpenGL ES profile version string' | sed 's/OpenGL ES profile version string: //g')"
 	GPU_MODEL="$(glxinfo -B | grep 'Device\|Vendor' | sed 's/.*Device: //g' | sed 's/.*Vendor: //g' | sed -e 's/([^()]*)//g' | xargs)"
-	HOSTNAME="$(hostname)"
+	HOSTNAME="$(tr -d " \t\n\r" </etc/hostname)"
 	LOCAL_IP="$(hostname -I | awk '{print $1}')"
 	PUBLIC_IP="$(wget -qO- ifconfig.me)"
 	CURRENT_USER="$(whoami)"
@@ -382,10 +382,10 @@ toggle_overscan() {
 	case "${1}" in
 	on)
 		set_config_var disable_overscan 0
-	;;
+		;;
 	off)
 		set_config_var disable_overscan 1
-	;;
+		;;
 	esac
 }
 
@@ -395,18 +395,18 @@ toggle_screen_blanking() {
 	on)
 		sudo rm -f /etc/X11/xorg.conf.d/10-blanking.conf
 		sudo sed -i '/^\o033/d' /etc/issue
-	;;
+		;;
 	off)
-	    mkdir -p /etc/X11/xorg.conf.d/
-    	sudo cp -a /usr/share/raspi-config/10-blanking.conf /etc/X11/xorg.conf.d/
-    	echo "\\033[9;0]" | sudo tee -a /etc/issue >/dev/null
-	;;
+		mkdir -p /etc/X11/xorg.conf.d/
+		sudo cp -a /usr/share/raspi-config/10-blanking.conf /etc/X11/xorg.conf.d/
+		echo "\\033[9;0]" | sudo tee -a /etc/issue >/dev/null
+		;;
 	esac
 }
 
 toggle_pixel_doubling() {
 	case "${1}" in
-	on) 
+	on)
 		SCREEN_X_VALUE=$(xrandr 2>&1 | grep current | cut -f2 -d, | cut -f3 -d' ')
 		SCREEN_Y_VALUE=$(xrandr 2>&1 | grep current | cut -f2 -d, | cut -f5 -d' ')
 		if is_not_number "${SCREEN_X_VALUE}" || is_not_number "${SCREEN_Y_VALUE}"; then
@@ -414,50 +414,180 @@ toggle_pixel_doubling() {
 		fi
 		NEW_SCREEN_X_VALUE="$((SCREEN_X_VALUE / 2))"
 		NEW_SCREEN_Y_VALUE="$((SCREEN_Y_VALUE / 2))"
-		set_config_var framebuffer_width "${NEW_SCREEN_X_VALUE}" 
-		set_config_var framebuffer_height "${NEW_SCREEN_Y_VALUE}" 
-		set_config_var scaling_kernel 8 
-	;;
+		set_config_var framebuffer_width "${NEW_SCREEN_X_VALUE}"
+		set_config_var framebuffer_height "${NEW_SCREEN_Y_VALUE}"
+		set_config_var scaling_kernel 8
+		;;
 	off)
-		clear_config_var framebuffer_width 
-		clear_config_var framebuffer_height 
-		clear_config_var scaling_kernel 
-	;;
+		clear_config_var framebuffer_width
+		clear_config_var framebuffer_height
+		clear_config_var scaling_kernel
+		;;
 	esac
+}
+
+change_password() {
+	passwd "$USER"
 }
 
 toggle_vnc() {
 	sudo_password
-	case "${1}" in 
+	case "${1}" in
 	on)
 		if is_installed realvnc-vnc-server || sudo apt-get install -y realvnc-vnc-server; then
 			sudo systemctl enable vncserver-x11-serviced.service &&
-			sudo systemctl start vncserver-x11-serviced.service
+				sudo systemctl start vncserver-x11-serviced.service
 		fi
-	;;
+		;;
 	off)
 		if is_installed realvnc-vnc-server; then
 			sudo systemctl disable vncserver-x11-serviced.service
 			sudo systemctl stop vncserver-x11-serviced.service
-    	fi
-	;;
+		fi
+		;;
 	esac
 }
 
 toggle_ssh() {
 	if [ -e /var/log/regen_ssh_keys.log ] && ! grep -q "^finished" /var/log/regen_ssh_keys.log; then
-		error "$LINENO" "Initial ssh key generation still running. Please wait and try again." 
+		error "$LINENO" "Initial ssh key generation still running. Please wait and try again."
 	fi
-	case "${1}" in 
+	case "${1}" in
 	on)
 		ssh-keygen -A &&
-		sudo update-rc.d ssh enable &&
-		sudo invoke-rc.d ssh start
-	;;
+			sudo update-rc.d ssh enable &&
+			sudo invoke-rc.d ssh start
+		;;
 	off)
 		sudo update-rc.d ssh disable &&
-		sudo invoke-rc.d ssh stop
-	;;
+			sudo invoke-rc.d ssh stop
+		;;
+	esac
+}
+
+configure_keyboard() {
+	sudo_password
+	status "Please select the keymap of the keyboard."
+	sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"$(grep "$(cut -c23- <"${DIRECTORY}/keymaps" | fzf --height 20 --cycle)" <"${DIRECTORY}/keymaps" | cut -c1-22 | xargs)\"/"
+	status "Configuring keyboard-configuration..."
+	sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration || error "Failed to configure keyboard-configuration."
+	status "Enabling keyboard-setup initscript..."
+	sudo -E invoke-rc.d keyboard-setup start || error "Failed to enable keyboard-setup initscript."
+	status "Setting up keyboard..."
+	sudo -E setsid sh -c 'exec setupcon -k --force <> $(echo "/dev/tty$(sudo fgconsole)") >&0' || error "Failed to set up the font and the keyboard on the console.\nOutput:\n${OUTPUT}"
+	sudo -E udevadm trigger --subsystem-match=input --action=change || error "Failed to trigger input change in udevadm.\nOutput:\n${OUTPUT}"
+}
+
+change_locale() {
+	sudo_password
+	LOCALE="$(fzf </usr/share/i18n/SUPPORTED)"
+	if ! grep -E "^${LOCALE}( |$)" /usr/share/i18n/SUPPORTED; then
+		return 1
+	fi
+	export LC_ALL=C
+	export LANG=C
+	local LG="/etc/locale.gen"
+	local NEW_LANG="$(cut -f1 -d " " <<<"${LOCALE}")"
+	[ "$(readlink -f "${LG}")" = "/usr/share/i18n/SUPPORTED" ] && sudo rm -f "${LG}"
+	echo "$LOCALE" | sudo tee /etc/locale.gen
+	sudo update-locale --no-checks LANG
+	sudo update-locale --no-checks "LANG=$NEW_LANG"
+	sudo dpkg-reconfigure -f noninteractive locales
+}
+
+change_timezone() {
+	sudo_password
+	local TIMEZONE_LIST="$(timedatectl list-timezones | sed 's/_/ /g')"
+	TIMEZONE="$(fzf <<<"${TIMEZONE_LIST}")"
+	sudo rm -f /etc/localtime
+	echo "$TIMEZONE" | sed 's/ /_//g' | sudo tee /etc/timezone
+	sudo dpkg-reconfigure -f noninteractive tzdata
+}
+
+set_vnc_resolution() {
+	RESOLUTION="$(echo "640x480
+720x480
+800x600
+1024x768
+1280x720
+1280x1024
+1600x1200
+1920x1080" | fzf)"
+
+	echo "[Desktop Entry]
+Type=Application
+Name=vnc_xrandr
+Comment=Set resolution for VNC
+NoDisplay=true
+Exec=sh -c 'if ! (xrandr | grep -q -w connected) ; then $(command -v xrandr) --fb ${RESOLUTION} ; fi'" | sudo tee /etc/xdg/autostart/vnc_xrandr.desktop
+}
+
+set_hostname() {
+	sudo_password
+	CURRENT_HOSTNAME="$(tr -d " \t\n\r" </etc/hostname)"
+	read -p "Please enter a hostname: " -r HOSTNAME
+	if grep -q -e '[^-0-9A-Z_a-z]' -e '^[^0-9A-Za-z]' -e '[^0-9A-Za-z]$' -e '-_' -e '_-' <<<"${HOSTNAME}"; then
+		error "Invalid hostname."
+	fi
+	echo "${NEW_HOSTNAME}" >/etc/hostname
+	sudo sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
+}
+
+boot_behaviour() {
+	sudo_password
+	BOOT_OPTION="$(echo "Console
+Console Autologin
+Desktop
+Desktop Autologin" | fzf)"
+	case "${BOOT_OPTION}" in
+	"Console")
+		sudo systemctl set-default multi-user.target
+		sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
+		sudo rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
+		;;
+	"Console Autologin")
+		sudo systemctl set-default multi-user.target
+		sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
+		echo "[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $USER --noclear %I \${TERM}" | sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf
+		;;
+	"Desktop")
+		if [ -e /etc/init.d/lightdm ]; then
+			sudo systemctl set-default graphical.target
+			sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
+			sudo rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
+			sudo sed /etc/lightdm/lightdm.conf -i -e "s/^autologin-user=.*/#autologin-user=/"
+			if [ -e /etc/profile.d/raspi-config.sh ]; then
+				sudo rm -f /etc/profile.d/raspi-config.sh
+				if [ -e /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf ]; then
+					sudo rm -f /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf
+				fi
+				sudo telinit q
+			fi
+		else
+			error "Do 'sudo apt-get install lightdm' to allow configuration of boot to desktop"
+		fi
+		;;
+	"Desktop Autologin")
+		if is_file /etc/init.d/lightdm; then
+			sudo systemctl set-default graphical.target
+			sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
+			echo "[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $USER --noclear %I \${TERM}" | sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf
+			sudo sed /etc/lightdm/lightdm.conf -i -e "s/^\(#\|\)autologin-user=.*/autologin-user=$USER/"
+			if is_file /etc/profile.d/raspi-config.sh; then
+				sudo rm -f /etc/profile.d/raspi-config.sh
+				if is_file /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf; then
+					sudo rm -f /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf
+				fi
+				sudo telinit q
+			fi
+		else
+			error "Do 'sudo apt-get install lightdm' to allow configuration of boot to desktop"
+		fi
+		;;
 	esac
 }
 

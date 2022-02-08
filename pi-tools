@@ -97,7 +97,7 @@ is_dir() {
 }
 
 is_not_number() {
-	if is_number $1; then
+	if is_number "$1"; then
 		return 1
 	else
 		return 0
@@ -147,42 +147,26 @@ set_config_var() {
 	sudo_password
 	PROPERTY="$1"
 	VALUE="$2"
-	grep -v "^${PROPERTY}" /boot/config.txt | sudo tee /boot/config.txt
+	sudo cp -a /boot/config.txt /boot/config.txt.bak || error "Failed to backup /boot/config.txt"
+	if grep -q "^${PROPERTY}" /boot/config.txt; then
+		sudo sed -i '/'"^${PROPERTY}="'/{x;/^$/!d;g;}' /boot/config.txt # remove all occurence except first one
+		sudo sed -i "s/^${PROPERTY}=.*/${PROPERTY}=${VALUE}/" /boot/config.txt
+	else
+		echo "${PROPERTY}=${VALUE}" | sudo tee -a /boot/config.txt >/dev/null
+	fi
 }
 
 clear_config_var() {
-  lua - "$1" "$2" <<EOF > "$2.bak"
-local key=assert(arg[1])
-local fn=assert(arg[2])
-local file=assert(io.open(fn))
-for line in file:lines() do
-  if line:match("^%s*"..key.."=.*$") then
-    line="#"..line
-  end
-  print(line)
-end
-EOF
-mv "$2.bak" "$2"
+	sudo_password
+	PROPERTY="$1"
+	sudo cp -a /boot/config.txt /boot/config.txt.bak || error "Failed to backup /boot/config.txt"
+	sudo sed -i "/^[^#]/ s/\(^.*${PROPERTY}=.*$\)/#\1/" /boot/config.txt
 }
 
 get_config_var() {
-  lua - "$1" "$2" <<EOF
-local key=assert(arg[1])
-local fn=assert(arg[2])
-local file=assert(io.open(fn))
-local found=false
-for line in file:lines() do
-  local val = line:match("^%s*"..key.."=(.*)$")
-  if (val ~= nil) then
-    print(val)
-    found=true
-    break
-  end
-end
-if not found then
-   print(0)
-end
-EOF
+	PROPERTY="$1"
+	sudo_password
+	grep -m 1 "^${PROPERTY}" | sed s/.*=//g
 }
 
 sudo_password() {
@@ -397,12 +381,10 @@ toggle_overscan() {
 	sudo_password
 	case "${1}" in
 	on)
-		sudo sed -i 's/disable_overscan=//g' /boot/config.txt
-		echo "disable_overscan=0" | sudo tee -a /boot/config.txt 
+		set_config_var disable_overscan 0
 	;;
 	off)
-		sudo sed -i 's/disable_overscan=//g' /boot/config.txt
-		echo "disable_overscan=1" | sudo tee -a /boot/config.txt 
+		set_config_var disable_overscan 1
 	;;
 	esac
 }
@@ -425,56 +407,23 @@ toggle_screen_blanking() {
 toggle_pixel_doubling() {
 	case "${1}" in
 	on) 
-	if is_arm && ! is_fkms; then
 		SCREEN_X_VALUE=$(xrandr 2>&1 | grep current | cut -f2 -d, | cut -f3 -d' ')
 		SCREEN_Y_VALUE=$(xrandr 2>&1 | grep current | cut -f2 -d, | cut -f5 -d' ')
 		if is_not_number "${SCREEN_X_VALUE}" || is_not_number "${SCREEN_Y_VALUE}"; then
-			error "Could not read current screen dimensions"
+			error "Could not read current screen dimensions."
 		fi
-		NEW_SCREEN_X_VALUE=`expr $SCREEN_X_VALUE / 2`
-		NEW_SCREEN_Y_VALUE=`expr $SCREEN_Y_VALUE / 2`
-		set_config_var framebuffer_width "$NEW_SCREEN_X_VALUE" 
-		set_config_var framebuffer_height $NEW_SCREEN_Y_VALUE 
+		NEW_SCREEN_X_VALUE="$((SCREEN_X_VALUE / 2))"
+		NEW_SCREEN_Y_VALUE="$((SCREEN_Y_VALUE / 2))"
+		set_config_var framebuffer_width "${NEW_SCREEN_X_VALUE}" 
+		set_config_var framebuffer_height "${NEW_SCREEN_Y_VALUE}" 
 		set_config_var scaling_kernel 8 
-	fi
-	elif [ $RET -eq 1 ]; then
+	;;
+	off)
 		clear_config_var framebuffer_width 
 		clear_config_var framebuffer_height 
 		clear_config_var scaling_kernel 
-		STATUS=disabled
-	else
-		return $RET
-	fi
-	else
-	if [ $RET -eq 0 ] ; then
-		if [ -e /usr/share/dispsetup.sh ] ; then
-		rm /usr/share/dispsetup.sh
-		fi
-		echo '#!/bin/sh' > /usr/share/dispsetup.sh
-		DEV=$(xrandr | grep -w connected | cut -f1 -d' ')
-		for item in $DEV
-		do
-		echo xrandr --output $item --scale 0.5x0.5 --filter nearest >> /usr/share/dispsetup.sh
-		done
-		STATUS=enabled
-	elif [ $RET -eq 1 ]; then
-		if [ -e /usr/share/dispsetup.sh ] ; then
-		rm /usr/share/dispsetup.sh
-		fi
-		echo '#!/bin/sh' > /usr/share/dispsetup.sh
-		echo 'exit 0' >> /usr/share/dispsetup.sh
-		STATUS=disabled
-	else
-		return $RET
-	fi
-	chmod a+x /usr/share/dispsetup.sh
-	fi
-	if [ $RET -eq $CURRENT ]; then
-	ASK_TO_REBOOT=1
-	fi
-	if [ "$INTERACTIVE" = True ]; then
-	whiptail --msgbox "Pixel doubling is $STATUS" 20 60 1
-	fi
+	;;
+	esac
 }
 
 toggle_vnc() {

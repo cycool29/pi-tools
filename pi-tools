@@ -41,15 +41,15 @@ error() {
 }
 
 info() {
-	[ "${ENABLE_INFO}" ] && echo "${@}"
+	is_not_empty "${ENABLE_INFO}" && echo "${@}"
 }
 
 debug() {
-	[ "${ENABLE_DEBUG}" ] && echo "${@}"
+	is_not_empty "${ENABLE_DEBUG}" && echo "${@}"
 }
 
 dump() {
-	[ "${ENABLE_DUMP}" ] && echo "${@}"
+	is_not_empty "${ENABLE_DUMP}" && echo "${@}"
 }
 
 question() {
@@ -90,6 +90,15 @@ is_file() {
 	[[ -f "${TARGET}" ]]
 }
 
+is_not_file() {
+	TARGET="${1}"
+	if is_file "${TARGET}"; then
+		return 1
+	else
+		return 0
+	fi
+}
+
 is_dir() {
 	local TARGET="${1}"
 
@@ -121,7 +130,7 @@ is_ssh() {
 
 is_arm() {
 	ARCH=$(dpkg --print-architecture)
-	if [ "$ARCH" = "armhf" ] || [ "$ARCH" = "arm64" ]; then
+	if [ "$ARCH" == "armhf" ] || [ "$ARCH" == "arm64" ]; then
 		return 0
 	else
 		return 1
@@ -389,6 +398,59 @@ toggle_overscan() {
 	esac
 }
 
+toggle_spi() {
+	case "${1}" in
+	on)
+		set_config_var dtparam=spi on
+		if is_not_file /etc/modprobe.d/raspi-blacklist.conf; then
+			sudo touch /etc/modprobe.d/raspi-blacklist.conf
+		fi
+		sudo sed /etc/modprobe.d/raspi-blacklist.conf -i -e "s/^\(blacklist[[:space:]]*spi[-_]bcm2708\)/#\1/"
+		dtparam spi=on
+
+		;;
+	off)
+		set_config_var dtparam=spi off
+		if is_not_file /etc/modprobe.d/raspi-blacklist.conf; then
+			sudo touch /etc/modprobe.d/raspi-blacklist.conf
+		fi
+		sudo sed /etc/modprobe.d/raspi-blacklist.conf -i -e "s/^\(blacklist[[:space:]]*spi[-_]bcm2708\)/#\1/"
+		dtparam spi=off
+		;;
+	esac
+}
+
+toggle_i2c() {
+	case "${1}" in
+	on)
+		set_config_var dtparam=i2c_arm on &&
+			if is_not_file /etc/modprobe.d/raspi-blacklist.conf; then
+				sudo touch /etc/modprobe.d/raspi-blacklist.conf
+			fi
+		sudo sed /etc/modprobe.d/raspi-blacklist.conf -i -e "s/^\(blacklist[[:space:]]*i2c[-_]bcm2708\)/#\1/"
+		sudo sed /etc/modules -i -e "s/^#[[:space:]]*\(i2c[-_]dev\)/\1/"
+		if ! grep -q "^i2c[-_]dev" /etc/modules; then
+			printf "i2c-dev\n" | sudo tee -a /etc/modules
+		fi
+		dtparam i2c_arm=on
+		modprobe i2c-dev
+		;;
+	off)
+		set_config_var dtparam=i2c_arm off &&
+			if is_not_file /etc/modprobe.d/raspi-blacklist.conf; then
+				sudo touch /etc/modprobe.d/raspi-blacklist.conf
+			fi
+		sudo sed /etc/modprobe.d/raspi-blacklist.conf -i -e "s/^\(blacklist[[:space:]]*i2c[-_]bcm2708\)/#\1/"
+		sudo sed /etc/modules -i -e "s/^#[[:space:]]*\(i2c[-_]dev\)/\1/"
+		if ! grep -q "^i2c[-_]dev" /etc/modules; then
+			printf "i2c-dev\n" | sudo tee -a /etc/modules
+		fi
+		dtparam i2c_arm=off
+		modprobe i2c-dev
+		;;
+	esac
+}
+
 toggle_screen_blanking() {
 	sudo_password
 	case "${1}" in
@@ -533,13 +595,9 @@ set_hostname() {
 	sudo sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t$NEW_HOSTNAME/g" /etc/hosts
 }
 
-boot_behaviour() {
+set_boot_behaviour() {
 	sudo_password
-	BOOT_OPTION="$(echo "Console
-Console Autologin
-Desktop
-Desktop Autologin" | fzf)"
-	case "${BOOT_OPTION}" in
+	case "${1}" in
 	"Console")
 		sudo systemctl set-default multi-user.target
 		sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
@@ -553,14 +611,14 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin $USER --noclear %I \${TERM}" | sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf
 		;;
 	"Desktop")
-		if [ -e /etc/init.d/lightdm ]; then
+		if is_file /etc/init.d/lightdm; then
 			sudo systemctl set-default graphical.target
 			sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
 			sudo rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
 			sudo sed /etc/lightdm/lightdm.conf -i -e "s/^autologin-user=.*/#autologin-user=/"
-			if [ -e /etc/profile.d/raspi-config.sh ]; then
+			if is_file /etc/profile.d/raspi-config.sh; then
 				sudo rm -f /etc/profile.d/raspi-config.sh
-				if [ -e /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf ]; then
+				if is_file /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf; then
 					sudo rm -f /etc/systemd/system/getty@tty1.service.d/raspi-config-override.conf
 				fi
 				sudo telinit q
@@ -591,6 +649,42 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \${TERM}" | sudo tee /etc
 	esac
 }
 
+set_boot_wait_network() {
+	sudo_password
+	OPTION="${1}"
+	case "${OPTION}" in
+	on)
+		sudo mkdir -p /etc/systemd/system/dhcpcd.service.d/
+		echo "[Service]
+ExecStart=
+ExecStart=/usr/sbin/dhcpcd -w -q" | sudo tee /etc/systemd/system/dhcpcd.service.d/wait.conf
+		;;
+	off)
+		sudo rm -f /etc/systemd/system/dhcpcd.service.d/wait.conf
+		;;
+	esac
+}
+
+set_boot_splash() {
+	OPTION="${1}"
+	if is_not_file /usr/share/plymouth/themes/pix/pix.script; then
+		error "The splash screen is not installed so cannot be toggled."
+	fi
+	case "${OPTION}" in
+	on)
+		if ! grep -q "splash" /boot/cmdline.txt; then
+			sudo sed -i /boot/cmdline.txt -e "s/$/ quiet splash plymouth.ignore-serial-consoles/"
+		fi
+		;;
+	off)
+		if grep -q "splash" /boot/cmdline.txt; then
+			sed -i /boot/cmdline.txt -e "s/ quiet//"
+			sed -i /boot/cmdline.txt -e "s/ splash//"
+			sed -i /boot/cmdline.txt -e "s/ plymouth.ignore-serial-consoles//"
+		fi
+		;;
+	esac
+}
 # error() {
 # 	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
 # 	local LINE_INDICATES_ERROR="$1"

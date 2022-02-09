@@ -87,7 +87,7 @@ is_not_empty() {
 is_file() {
 	local TARGET="${1}"
 
-	[[ -f "${TARGET}" ]]
+	[[ -e "${TARGET}" ]]
 }
 
 is_not_file() {
@@ -685,6 +685,90 @@ set_boot_splash() {
 		;;
 	esac
 }
+
+toggle_onewire() {
+	case "${1}" in
+	on)
+		set_config_var dtoverlay w1-gpio
+		;;
+	off)
+		clear_config_var dtoverlay
+		;;
+	esac
+}
+
+toggle_remote_gpio() {
+	case "${1}" in
+	on)
+		mkdir -p /etc/systemd/system/pigpiod.service.d/
+		echo "[Service]
+ExecStart=
+ExecStart=/usr/bin/pigpiod" | sudo tee /etc/systemd/system/pigpiod.service.d/public.conf
+		systemctl daemon-reload
+		if systemctl -q is-enabled pigpiod; then
+			systemctl restart pigpiod
+		fi
+		;;
+	off)
+		rm -f /etc/systemd/system/pigpiod.service.d/public.conf
+		systemctl daemon-reload
+		if systemctl -q is-enabled pigpiod; then
+			systemctl restart pigpiod
+		fi
+		;;
+	esac
+
+}
+
+set_memory_split() {
+	NEW_GPU_MEMORY="${1}"
+	if [ -e /boot/start_cd.elf ]; then
+		# New-style memory split setting
+
+		clear_config_var gpu_mem_1024
+		clear_config_var gpu_mem_512
+		clear_config_var gpu_mem_256
+
+		set_config_var gpu_mem "${NEW_GPU_MEMORY}"
+	else # Old firmware so do start.elf renaming
+		set_memory_split "${NEW_GPU_MEMORY}"
+	fi
+}
+
+toggle_serial_console() {
+	case "${1}" in
+	on)
+		if grep -q "console=ttyAMA0" /boot/cmdline.txt; then
+			if is_file /proc/device-tree/aliases/serial0; then
+				sudo sed -i /boot/cmdline.txt -e "s/console=ttyAMA0/console=serial0/"
+			fi
+		elif ! grep -q "console=ttyAMA0" /boot/cmdline.txt && ! grep -q "console=serial0" /boot/cmdline.txt; then
+			if is_file /proc/device-tree/aliases/serial0; then
+				sudo sed -i /boot/cmdline.txt -e "s/root=/console=serial0,115200 root=/"
+			else
+				sudo sed -i /boot/cmdline.txt -e "s/root=/console=ttyAMA0,115200 root=/"
+			fi
+		fi
+		toggle_serial_port on
+		;;
+	off)
+		sudo sed -i /boot/cmdline.txt -e "s/console=ttyAMA0,[0-9]\+ //"
+		sudo sed -i /boot/cmdline.txt -e "s/console=serial0,[0-9]\+ //"
+		;;
+	esac
+}
+
+toggle_serial_port() {
+	case "${1}" in
+	on)
+		set_config_var enable_uart 1
+		;;
+	off)
+		set_config_var enable_uart 0
+		;;
+	esac
+}
+
 # error() {
 # 	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
 # 	local LINE_INDICATES_ERROR="$1"

@@ -528,16 +528,27 @@ toggle_ssh() {
 }
 
 config_keyboard() {
-	info "Setting keymap in ..."
+	KEYMAP="$1"
+	info "Changing keymap ..."
 	debug set -x
-	sudo sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=${KEYMAP}/" status "Configuring keyboard-configuration..."
+	sudo sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=${KEYMAP}/"
+	debug set +x
+
+	info "Configuring keyboard-configuration..."
+	debug set -x
 	sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration || error "Failed to configure keyboard-configuration."
-	debug set +x 
-	status "Enabling keyboard-setup initscript..."
+	debug set +x
+
+	info "Enabling keyboard-setup initscript..."
+	debug set -x
 	sudo -E invoke-rc.d keyboard-setup start || error "Failed to enable keyboard-setup initscript."
-	status "Setting up keyboard..."
+	debug set +x
+
+	info "Setting up keyboard..."
+	debug set -x
 	sudo -E setsid sh -c 'exec setupcon -k --force <> $(echo "/dev/tty$(sudo fgconsole)") >&0' || error "Failed to set up the font and the keyboard on the console.\nOutput:\n${OUTPUT}"
 	sudo -E udevadm trigger --subsystem-match=input --action=change || error "Failed to trigger input change in udevadm.\nOutput:\n${OUTPUT}"
+	debug set +x
 }
 
 change_locale() {
@@ -560,7 +571,7 @@ change_locale() {
 change_timezone() {
 	TIMEZONE="$1"
 	sudo rm -f /etc/localtime
-	echo "$TIMEZONE" | sed 's/ /_//g' | sudo tee /etc/timezone
+	echo "$TIMEZONE" | sed 's/ /_/g' | sudo tee /etc/timezone >/dev/null
 	sudo dpkg-reconfigure -f noninteractive tzdata
 }
 
@@ -596,19 +607,19 @@ set_hostname() {
 set_boot_behaviour() {
 	sudo_password
 	case "${1}" in
-	"Console")
+	"console")
 		sudo systemctl set-default multi-user.target
 		sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
 		sudo rm -f /etc/systemd/system/getty@tty1.service.d/autologin.conf
 		;;
-	"Console Autologin")
+	"console-autologin")
 		sudo systemctl set-default multi-user.target
 		sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
 		echo "[Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin $USER --noclear %I \${TERM}" | sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf
 		;;
-	"Desktop")
+	"desktop")
 		if is_file /etc/init.d/lightdm; then
 			sudo systemctl set-default graphical.target
 			sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
@@ -625,7 +636,7 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \${TERM}" | sudo tee /etc
 			error "Do 'sudo apt-get install lightdm' to allow configuration of boot to desktop"
 		fi
 		;;
-	"Desktop Autologin")
+	"desktop-autologin")
 		if is_file /etc/init.d/lightdm; then
 			sudo systemctl set-default graphical.target
 			sudo ln -fs /lib/systemd/system/getty@.service /etc/systemd/system/getty.target.wants/getty@tty1.service
@@ -960,7 +971,9 @@ text_format() {
 }
 
 text_format
-testfunc || error "Failed to run testfunc." 2
+abc() {
+	true
+}
 
 # marker
 case "$1" in
@@ -971,7 +984,7 @@ change_timezone | ct)
 	if is_not_empty "$1"; then
 		TIMEZONE="$1"
 		if ! grep -q "^${TIMEZONE}$" <<<"${TIMEZONE_LIST}"; then
-			error "${TIMEZONE} is nota valid timezone."
+			error "${TIMEZONE} is not a valid timezone."
 		fi
 	else
 		question -m "Choose a timezone:"
@@ -979,10 +992,53 @@ change_timezone | ct)
 	fi
 	change_timezone "${TIMEZONE}"
 	;;
-config_keyboard | ck)
+
+configure_keyboard | ck)
 	shift
 	sudo_password
-	question "Select a keymap of the keyboard:"
-	KEYMAP="$(grep "$(cut -c23- <"${DIRECTORY}/keymaps" | fzf --height=50% --cycle)" <"${DIRECTORY}/keymaps" | cut -c1-22 | xargs)"
+	if is_not_empty "$1"; then
+		KEYMAP="$1"
+		if ! grep -q "^${KEYMAP}$" <<<"$(cat ${DIRECTORY}/files/keymap | sed 's/ .*//g')"; then
+			error "${KEYMAP} is not a valid keymap."
+		fi
+	else
+		question "Select a keymap of the keyboard:"
+		KEYMAP="$(grep "$(cut -c23- <"${DIRECTORY}/files/keymaps" | fzf --height=50% --cycle)" <"${DIRECTORY}/files/keymaps" | cut -c1-22 | xargs)"
+	fi
+
+	config_keyboard "${KEYMAP}"
+	;;
+
+device_info | di)
+	shift
+	get_device_info
+	;;
+
+set_boot_behaviour | bh)
+	shift
+	BOOT_BEHAVIOUR_LIST=('console-autologin' 'console' 'desktop' 'desktop-autologin')
+	if is_not_empty "$1"; then
+		BOOT_BEHAVIOUR="$1"
+		# shellcheck disable=SC2076
+		if ! [[ " ${BOOT_BEHAVIOUR_LIST[*]} " =~ " ${BOOT_BEHAVIOUR} " ]]; then
+			error "${BOOT_BEHAVIOUR} is not a valid boot behaviour."
+		fi
+	else
+		question "Select a boot behaviour:"
+		BOOT_BEHAVIOUR="$(fzf --height=50% --cycle <<<"$(printf "%s\n" "${BOOT_BEHAVIOUR_LIST[@]}")")"
+	fi
+	set_boot_behaviour "${BOOT_BEHAVIOUR}"
+	;;
+set_boot_splash | bs)
+	shift
+	if is_not_empty "$1"; then
+		if [ "$1" == "enable" ] || [ "$1" == "disable" ]; then
+			set_boot_splash "$1"
+		else
+			error "$1 is not a valid option.\nValid options: enable, disable"
+		fi
+	else
+		error "You didn't provide an option.\nValid options: enable, disable"
+	fi
 	;;
 esac

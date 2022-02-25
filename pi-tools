@@ -527,12 +527,12 @@ toggle_ssh() {
 	esac
 }
 
-configure_keyboard() {
-	sudo_password
-	status "Please select the keymap of the keyboard."
-	sudo -E sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=\"$(grep "$(cut -c23- <"${DIRECTORY}/keymaps" | fzf --height 20 --cycle)" <"${DIRECTORY}/keymaps" | cut -c1-22 | xargs)\"/"
-	status "Configuring keyboard-configuration..."
+config_keyboard() {
+	info "Setting keymap in ..."
+	debug set -x
+	sudo sed -i /etc/default/keyboard -e "s/^XKBLAYOUT.*/XKBLAYOUT=${KEYMAP}/" status "Configuring keyboard-configuration..."
 	sudo -E dpkg-reconfigure -f noninteractive keyboard-configuration || error "Failed to configure keyboard-configuration."
+	debug set +x 
 	status "Enabling keyboard-setup initscript..."
 	sudo -E invoke-rc.d keyboard-setup start || error "Failed to enable keyboard-setup initscript."
 	status "Setting up keyboard..."
@@ -558,9 +558,7 @@ change_locale() {
 }
 
 change_timezone() {
-	sudo_password
-	local TIMEZONE_LIST="$(timedatectl list-timezones | sed 's/_/ /g')"
-	TIMEZONE="$(fzf <<<"${TIMEZONE_LIST}")"
+	TIMEZONE="$1"
 	sudo rm -f /etc/localtime
 	echo "$TIMEZONE" | sed 's/ /_//g' | sudo tee /etc/timezone
 	sudo dpkg-reconfigure -f noninteractive tzdata
@@ -769,30 +767,168 @@ toggle_serial_port() {
 	esac
 }
 
-# error() {
-# 	echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}ERROR${NORMAL}" 1>&2
-# 	local LINE_INDICATES_ERROR="$1"
-# 	shift
-# 	while [ "${1}" ]; do
-# 		if echo "${1}" | grep -q ' '; then
-# 			local ERROR_MESSAGE="${1}" # there is space in $1, assume error message
-# 		elif is_number "${1}"; then
-# 			local EXIT_CODE="${1}" # $1 is a number, assume exit code
-# 		else
-# 			local FUNCTION_NAME="${1}" # no space and not number in $1, assume function name
-# 		fi
-# 		shift
-# 	done
-# 	local EXIT_CODE="${EXIT_CODE:-1}" # if no exit code specified, fall back to 1
+enable_overlayfs() {
+	KERNEL=$(uname -r)
+	INITRD=initrd.img-"${KERNEL}"-overlay
 
-# 	echo "    Near line ${LINE_INDICATES_ERROR}." 1>&2
-# 	is_not_empty "${FUNCTION_NAME}" && echo "    At Function: ${FUNCTION_NAME}" 1>&2
-# 	is_not_empty "${ERROR_MESSAGE}" && echo "    Error Message: ${ERROR_MESSAGE}" 1>&2
-# 	echo "    Exit code: ${EXIT_CODE}" 1>&2
-# 	trap '' ERR
+	# mount the boot partition as writable if it isn't already
+	if findmnt /boot | grep -q " ro,"; then
+		if ! mount -o remount,rw /boot 2>/dev/null; then
+			error "Unable to mount boot partition as writable - cannot enable"
+		fi
+		BOOTRO=yes
+	else
+		BOOTRO=no
+	fi
 
-# 	exit "${EXIT_CODE}"; kill $$
-# }
+	echo "# Local filesystem mounting			-*- shell-script -*-
+#
+# This script overrides local_mount_root() in /scripts/local
+# and mounts root as a read-only filesystem with a temporary (rw)
+# overlay filesystem.
+#
+. /scripts/local
+local_mount_root()
+{
+	local_top
+	local_device_setup "${ROOT}" "root file system"
+	ROOT="${DEV}"
+	# Get the root filesystem type if not set
+	if [ -z "${ROOTFSTYPE}" ]; then
+		FSTYPE=$(get_fstype "${ROOT}")
+	else
+		FSTYPE=${ROOTFSTYPE}
+	fi
+	local_premount
+	# CHANGES TO THE ORIGINAL FUNCTION BEGIN HERE
+	# N.B. this code still lacks error checking
+	modprobe ${FSTYPE}
+	checkfs ${ROOT} root "${FSTYPE}"
+	# Create directories for root and the overlay
+	mkdir /lower /upper
+	# Mount read-only root to /lower
+	if [ "${FSTYPE}" != "unknown" ]; then
+		mount -r -t ${FSTYPE} ${ROOTFLAGS} ${ROOT} /lower
+	else
+		mount -r ${ROOTFLAGS} ${ROOT} /lower
+	fi
+	modprobe overlay || insmod "/lower/lib/modules/$(uname -r)/kernel/fs/overlayfs/overlay.ko"
+	# Mount a tmpfs for the overlay in /upper
+	mount -t tmpfs tmpfs /upper
+	mkdir /upper/data /upper/work
+	# Mount the final overlay-root in $rootmnt
+	mount -t overlay \
+	    -olowerdir=/lower,upperdir=/upper/data,workdir=/upper/work \
+	    overlay ${rootmnt}
+}" sudo tee /etc/initramfs-tools/scripts/overlay
+
+	# add the overlay to the list of modules
+	if ! grep overlay /etc/initramfs-tools/modules >/dev/null; then
+		echo overlay >>/etc/initramfs-tools/modules
+	fi
+
+	# build the new initramfs
+	sudo update-initramfs -c -k "$KERN"
+
+	# rename it so we know it has overlay added
+	sudo mv /boot/initrd.img-"$KERN" /boot/"$INITRD"
+
+	# there is now a modified initramfs ready for use...
+
+	# modify config.txt
+	sudo sed -i /boot/config.txt -e "/initramfs.*/d"
+	sudo echo initramfs "$INITRD" >>/boot/config.txt
+
+	# modify command line
+	if ! grep -q "boot=overlay" /boot/cmdline.txt; then
+		sed -i /boot/cmdline.txt -e "s/^/boot=overlay /"
+	fi
+
+	if [ "$BOOTRO" = "yes" ]; then
+		if ! mount -o remount,ro /boot 2>/dev/null; then
+			echo "Unable to remount boot partition as read-only"
+		fi
+	fi
+}
+
+disable_overlayfs() {
+	KERNEL="$(uname -r)"
+	# mount the boot partition as writable if it isn't already
+	if findmnt /boot | grep -q " ro,"; then
+		if ! mount -o remount,rw /boot 2>/dev/null; then
+			error "Unable to mount boot partition as writable - cannot disable"
+		fi
+		BOOTRO=yes
+	else
+		BOOTRO=no
+	fi
+
+	# modify config.txt
+	sed -i /boot/config.txt -e "/initramfs.*/d"
+	update-initramfs -d -k "${KERNEL}-overlay"
+
+	# modify command line
+	sed -i /boot/cmdline.txt -e "s/\(.*\)boot=overlay \(.*\)/\1\2/"
+
+	if [ "$BOOTRO" = "yes" ]; then
+		if ! mount -o remount,ro /boot 2>/dev/null; then
+			echo "Unable to remount boot partition as read-only"
+		fi
+	fi
+}
+
+toggle_overlayfs() {
+	if is_dir "/lib/modules/$(uname -r)"; then
+		error "Could not find modules for the running kernel ($(uname -r))."
+	fi
+
+	case "${1}" in
+	on)
+		enable_overlayfs
+		;;
+	off)
+		disable_overlayfs
+		;;
+	esac
+
+	if grep -q "boot=overlay" /proc/cmdline; then
+		if grep /boot /etc/fstab | grep -q "defaults.*,ro "; then
+			BPRO="read-only"
+		else
+			BPRO="writable"
+		fi
+	else
+
+		if grep /boot /etc/fstab | grep -q "defaults.*,ro "; then
+			DEFAULT=
+			CURRENT=1
+			STATUS="read-only"
+		fi
+
+		if [ $RET -eq $CURRENT ]; then
+			if [ $RET -eq 0 ]; then
+				if enable_bootro; then
+					STATUS="read-only"
+					ASK_TO_REBOOT=1
+				else
+					STATUS="unchanged"
+				fi
+			elif [ $RET -eq 1 ]; then
+				if disable_bootro; then
+					STATUS="writable"
+					ASK_TO_REBOOT=1
+				else
+					STATUS="unchanged"
+				fi
+			else
+				return $RET
+			fi
+		fi
+		if [ "$INTERACTIVE" = True ]; then
+			whiptail --msgbox "The boot partition is $STATUS." 20 60 1
+		fi
+	fi
+}
 
 # trap 'error ${LINENO} ${FUNCNAME}' ERR
 trap 'echo -e "${RED}${BOLD}[!]${NORMAL} ${LIGHT_RED}${UNDERLINE}CTRL-C detected. Exiting now.${NORMAL}" 1>&2; exit 1' INT
@@ -825,39 +961,28 @@ text_format() {
 
 text_format
 testfunc || error "Failed to run testfunc." 2
-"$@"
 
-# wow || error "failed"
-# set_keyboard
-# case $1 in
-# 	-h|--help)
-# 		show_help_ERROR_MESSAGE
-# 	;;
-# 	di|device-info)
-# 		shift
-# 		"${DIRECTORY}/scripts/get-device-info" || exit 1
-# 	;;
-# 	bt|bluetooth)
-# 		shift
-# 		"${DIRECTORY}/scripts/bluetooth" "$@" || exit 1
-# 	;;
-# 	u|update-apps)
-# 		shift
-# 		update_apps
-# 	;;
-# 	sk|set-keyboard)
-# 		shift
-# 		set_keyboard
-# 	;;
-# 	ef|expand-filesystem)
-# 		shift
-# 		expand_rootfs
-# 	;;
-# 	wf|wifi)
-# 		shift
-# 		"${DIRECTORY}/scripts/wifi" "$@" || exit 1
-# 	;;
-# 	*)
-# 		pi-tools_help_ERROR_MESSAGE
-# esac
-#echo "$(echo "apt ($(apt list --installed  | grep -v Listing 2>/dev/null | wc -l))")$([ -a "$(command -v snap)" ] && if ! snap list 2>&1 | grep -q "No snaps are installed"; then echo " snap ($(snap list | tail -n +2 | wc -l))"; fi)$([ -a "$(command -v flatpak)" ] && if flatpak info 2>/dev/null | grep -q "Note that the directories"; then export XDG_DATA_DIRS="$XDG_DATA_DIRS:$(flatpak info 2>/dev/null | tail -n +4 | head -n 2 | xargs | sed 's/ /:/g')"; fi && [ "$(flatpak list)" != "" ] && echo " flatpak ($(flatpak list | grep -v "Application ID"  | wc -l))")"
+# marker
+case "$1" in
+change_timezone | ct)
+	shift
+	sudo_password || exit 1
+	TIMEZONE_LIST="$(timedatectl list-timezones | sed 's/_/ /g')"
+	if is_not_empty "$1"; then
+		TIMEZONE="$1"
+		if ! grep -q "^${TIMEZONE}$" <<<"${TIMEZONE_LIST}"; then
+			error "${TIMEZONE} is nota valid timezone."
+		fi
+	else
+		question -m "Choose a timezone:"
+		TIMEZONE="$(fzf --cycle --height=50% <<<"${TIMEZONE_LIST}")"
+	fi
+	change_timezone "${TIMEZONE}"
+	;;
+config_keyboard | ck)
+	shift
+	sudo_password
+	question "Select a keymap of the keyboard:"
+	KEYMAP="$(grep "$(cut -c23- <"${DIRECTORY}/keymaps" | fzf --height=50% --cycle)" <"${DIRECTORY}/keymaps" | cut -c1-22 | xargs)"
+	;;
+esac
